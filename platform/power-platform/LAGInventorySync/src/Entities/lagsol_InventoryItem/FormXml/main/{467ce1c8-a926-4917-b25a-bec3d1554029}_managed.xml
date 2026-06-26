@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<forms xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <systemform>
+    <formid>{467ce1c8-a926-4917-b25a-bec3d1554029}</formid>
+    <IntroducedVersion>1.0</IntroducedVersion>
+    <FormPresentation>1</FormPresentation>
+    <FormActivationState>1</FormActivationState>
+    <form>
+      <tabs>
+        <tab verticallayout="true" id="{B8EAC3A0-AC4A-4365-853C-A731C53EC76A}" IsUserDefined="1">
+          <labels>
+            <label description="General" languagecode="1033" />
+          </labels>
+          <columns>
+            <column width="100%">
+              <sections>
+                <section showlabel="false" showbar="false" IsUserDefined="0" id="{92746045-64C5-482D-BECD-07109AE153B2}">
+                  <labels>
+                    <label description="General" languagecode="1033" />
+                  </labels>
+                  <rows>
+                    <row>
+                      <cell id="{B1C82C3C-3E74-4086-BFD8-ECF42665AC5D}">
+                        <labels>
+                          <label description="" languagecode="1033" />
+                        </labels>
+                        <control id="lagsol_name" classid="{4273EDBD-AC1D-40d3-9FB2-095C621B552D}" datafieldname="lagsol_name" />
+                      </cell>
+                    </row>
+                    <row>
+                      <cell id="{B73E94E0-90BC-4827-91A0-F880ECCB0948}">
+                        <labels>
+                          <label description="" languagecode="1033" />
+                        </labels>
+                        <control id="ownerid" classid="{270BD3DB-D9AF-4782-9025-509E298DEC0A}" datafieldname="ownerid" />
+                      </cell>
+                    </row>
+                    <row>
+                      <cell id="{a294f568-123b-4a2b-bb5a-371f1c0c6bb4}">
+                        <labels>
+                          <label description="" languagecode="1033" />
+                        </labels>
+                        <control id="lagsol_skuid" classid="{4273edbd-ac1d-40d3-9fb2-095c621b552d}" datafieldname="lagsol_skuid" />
+                      </cell>
+                    </row>
+                    <row>
+                      <cell id="{246d8264-ce12-4100-bd65-5ceed5662062}">
+                        <labels>
+                          <label description="" languagecode="1033" />
+                        </labels>
+                        <control id="lagsol_unitprice" classid="{c3efe0c3-0ec6-42be-8349-cbd9079dfd8e}" datafieldname="lagsol_unitprice" />
+                      </cell>
+                    </row>
+                  </rows>
+                </section>
+              </sections>
+            </column>
+          </columns>
+        </tab>
+      </tabs>
+    </form>
+    <IsCustomizable>1</IsCustomizable>
+    <CanBeDeleted>1</CanBeDeleted>
+    <LocalizedNames>
+      <LocalizedName description="Information" languagecode="1033" />
+    </LocalizedNames>
+    <Descriptions>
+      <Description description="A form for this entity." languagecode="1033" />
+    </Descriptions>
+  </systemform>
+</forms>

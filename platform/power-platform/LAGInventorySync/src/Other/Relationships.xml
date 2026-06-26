@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<EntityRelationships xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <EntityRelationship Name="business_unit_lagsol_inventoryitem" />
+  <EntityRelationship Name="lk_lagsol_inventoryitem_createdby" />
+  <EntityRelationship Name="lk_lagsol_inventoryitem_modifiedby" />
+  <EntityRelationship Name="owner_lagsol_inventoryitem" />
+  <EntityRelationship Name="team_lagsol_inventoryitem" />
+  <EntityRelationship Name="user_lagsol_inventoryitem" />
+</EntityRelationships>
