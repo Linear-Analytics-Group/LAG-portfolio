@@ -1,0 +1,5 @@
+# Enterprise Execution Requirements for Inventory Sync Engine
+requests>=2.31.0
+pandas>=2.2.0
+msal>=1.22.0
+dotenv
