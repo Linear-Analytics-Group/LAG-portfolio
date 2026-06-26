@@ -1,0 +1,117 @@
+# ==============================================================================
+# 🔒 CORE SECRETS & LOCAL CONFIGURATION
+# ==============================================================================
+# Never commit plain-text credentials, tenant IDs, or private service tokens
+.env
+.env.*
+!.env.example
+secrets.toml
+*.pfx
+*.publishsettings
+
+# ==============================================================================
+# 🐍 PYTHON & VIRTUAL ENVIRONMENTS
+# ==============================================================================
+# Isolated Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+/ENV/
+
+# Python Bytecode, Compilations, and Optimization Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Testing & Linting Framework Enclosures
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Distribution, Wheels, and Local Packaging Artifacts
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ==============================================================================
+# 🛠️ MICROSOFT POWER PLATFORM & .NET DEVELOPMENT
+# ==============================================================================
+# Suppress transient compilation outputs from C# Dataverse Plugins or Custom APIs
+[Bb]in/
+[Oo]bj/
+GeneratedFiles/
+[Cc]ache/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.clog
+
+# Explicit solution paths to ignore local environment compilation overrides
+/platform/power-platform/LinearInventorySync/bin/
+/platform/power-platform/LinearInventorySync/obj/
+
+# ==============================================================================
+# 📦 JAVASCRIPT / NODE.JS (Power Apps Component Framework / PCF Controls)
+# ==============================================================================
+# Block node module tracking and local test-harness outputs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+out/
+.pcf/
+
+# ==============================================================================
+# 💻 OS SPECIFIC OVERHEAD (macOS Apple Silicon & Windows Cross-Talk)
+# ==============================================================================
+# General macOS Finder metadata changes
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon\r
+._*
+
+# macOS Indexing & Volume tracking structures
+.Spotlight-V100
+.Trashes
+
+# Windows thumbnail databases
+Thumbs.db
+ehthumbs.db
+
+# ==============================================================================
+# 📝 IDE & DEVELOPER TEXT EDITORS
+# ==============================================================================
+# VS Code runtime caching (while allowing workspace configuration sharing)
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains / IntelliJ / PyCharm frameworks
+.idea/
+*.swp
+*~
