@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🔒 CORE SECRETS & LOCAL CONFIGURATION
+# CORE SECRETS & LOCAL CONFIGURATION
 # ==============================================================================
 # Never commit plain-text credentials, tenant IDs, or private service tokens
 .env
@@ -10,7 +10,12 @@ secrets.toml
 *.publishsettings
 
 # ==============================================================================
-# 🐍 PYTHON & VIRTUAL ENVIRONMENTS
+# PROJECT SPECIFIC
+# ==============================================================================
+services/inventory-sync-engine/generate_mock_data.py
+
+# ==============================================================================
+# PYTHON & VIRTUAL ENVIRONMENTS
 # ==============================================================================
 # Isolated Virtual Environments
 .venv/
@@ -54,7 +59,7 @@ share/python-wheels/
 MANIFEST
 
 # ==============================================================================
-# 🛠️ MICROSOFT POWER PLATFORM & .NET DEVELOPMENT
+# MICROSOFT POWER PLATFORM & .NET DEVELOPMENT
 # ==============================================================================
 # Suppress transient compilation outputs from C# Dataverse Plugins or Custom APIs
 [Bb]in/
@@ -72,7 +77,7 @@ GeneratedFiles/
 /platform/power-platform/LinearInventorySync/obj/
 
 # ==============================================================================
-# 📦 JAVASCRIPT / NODE.JS (Power Apps Component Framework / PCF Controls)
+# JAVASCRIPT / NODE.JS (Power Apps Component Framework / PCF Controls)
 # ==============================================================================
 # Block node module tracking and local test-harness outputs
 node_modules/
@@ -84,7 +89,7 @@ out/
 .pcf/
 
 # ==============================================================================
-# 💻 OS SPECIFIC OVERHEAD (macOS Apple Silicon & Windows Cross-Talk)
+# OS SPECIFIC OVERHEAD (macOS Apple Silicon & Windows Cross-Talk)
 # ==============================================================================
 # General macOS Finder metadata changes
 .DS_Store
@@ -102,7 +107,7 @@ Thumbs.db
 ehthumbs.db
 
 # ==============================================================================
-# 📝 IDE & DEVELOPER TEXT EDITORS
+# IDE & DEVELOPER TEXT EDITORS
 # ==============================================================================
 # VS Code runtime caching (while allowing workspace configuration sharing)
 .vscode/
