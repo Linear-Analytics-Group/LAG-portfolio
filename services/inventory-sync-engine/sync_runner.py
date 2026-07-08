@@ -154,8 +154,11 @@ def main() -> int:
 
     try:
         client = build_dataverse_client()
-    except (RuntimeError, DataverseAuthenticationError) as exc:
+    except RuntimeError as exc:
         print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+    except DataverseAuthenticationError as exc:
+        print(f"Authentication error: {exc}", file=sys.stderr)
         return 1
 
     records = load_erp_inventory_feed(CSV_PATH)
