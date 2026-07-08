@@ -108,7 +108,7 @@ alias gpsync="gporigin && gpcloud"                                # Double-vault
 Tracking against the public-release roadmap. Work top-down; do not start a
 later phase until the one above it is checked off.
 
-- [ ] **Phase 1 — Dynamic Execution & Schema Verification** *(current)*
+- [X] **Phase 1 — Dynamic Execution & Schema Verification** *(current)*
   - Run `python3 sync_runner.py` from `services/inventory-sync-engine/` —
     confirm namespace bindings, editable install paths, and `.env` lookups
     all resolve without error.
@@ -117,6 +117,9 @@ later phase until the one above it is checked off.
   - Validate idempotency: run the sync script twice — second run must return
     `204 No Content`, not a constraint violation or duplicate record error.
 - [ ] **Phase 2 — Production Code Refactoring**
+  - Add pydantic and pydantic-settings to our runtime dependency array.
+  - Implement a unified configuration schema (config.py) to replace all instance variables of load_dotenv().
+  - Replace all stdout print() statements with a properly configured, structured Python logging matrix.
   - Standardize NumPy-style docstrings across `clients/base.py`,
     `clients/odata.py`, `clients/dataverse.py`, and `sync_runner.py`.
   - Inject strict type annotations across all execution paths in those three
