@@ -121,3 +121,11 @@ ehthumbs.db
 .idea/
 *.swp
 *~
+
+# ====================================================================
+# AI & Operations Sovereign Context Locks
+# ====================================================================
+.ai-context/
+.claudemy/
+*master-framework*
+*context-bootstrap*
