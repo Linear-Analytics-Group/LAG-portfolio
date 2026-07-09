@@ -3,6 +3,20 @@
 from abc import ABC, abstractmethod
 
 
+class AuthenticationError(Exception):
+    """Root of the connector authentication-failure hierarchy.
+
+    Raised (via a system-specific subclass, e.g. ``DataverseAuthenticationError``)
+    when a connector's identity provider rejects its credentials or its
+    token response cannot be parsed or validated. Orchestration code that
+    must remain agnostic to which destination system it is talking to
+    (e.g. a sync runner) should catch this base class rather than any
+    concrete subclass.
+    """
+
+    pass
+
+
 class BaseClient(ABC):
     """Protocol-agnostic base class defining the minimum authentication contract for all connectors.
 
@@ -62,11 +76,12 @@ class BaseClient(ABC):
 
         Raises
         ------
-        Exception
-            Concrete subclasses should raise a system-specific authentication
-            exception (e.g., ``DataverseAuthenticationError``) if the identity
-            provider rejects the client credentials, the authority endpoint is
-            unreachable, or the token response cannot be parsed or validated.
+        AuthenticationError
+            Concrete subclasses should raise a system-specific subclass of
+            ``AuthenticationError`` (e.g., ``DataverseAuthenticationError``)
+            if the identity provider rejects the client credentials, the
+            authority endpoint is unreachable, or the token response cannot
+            be parsed or validated.
 
         Notes
         -----

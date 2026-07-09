@@ -10,7 +10,8 @@ dependencies = [
     "pydantic>=2.7.0",
     "pydantic-settings>=2.4.0",
     "pandas>=2.2.0",
-    "pyarrow>=14.0.0"
+    "pyarrow>=14.0.0",
+    "lag-data-utils>=1.0.0"
 ]
 
 [tool.hatch.build.targets.wheel]
