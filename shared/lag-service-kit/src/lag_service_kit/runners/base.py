@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Generic, TypeVar
 
 import pandas as pd
 from pydantic import ValidationError
@@ -13,8 +13,10 @@ from ..logging import configure_logging
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+ClientT = TypeVar("ClientT", bound=BaseClient)
 
-class BaseSyncRunner(ABC):
+
+class BaseSyncRunner(ABC, Generic[ClientT]):
     """Template-method orchestrator for a source-to-destination sync service.
 
     ``BaseSyncRunner`` is the root of the sync-runner hierarchy, mirroring
@@ -22,9 +24,21 @@ class BaseSyncRunner(ABC):
     sync run — load settings, configure logging, authenticate, read
     records, write records, report results — without assuming a source
     format, a record schema, or a destination system. Concrete services
-    subclass it, typically through an intermediate domain-specific base
-    class (e.g., a future ``BaseInventorySyncRunner``), to supply those
-    specifics.
+    subclass it, typically through an intermediate protocol-specific base
+    class (e.g., a future inventory service's
+    ``BaseODataInventorySyncRunner``), to supply those specifics.
+
+    ``BaseSyncRunner`` is generic over ``ClientT``, the transport client
+    type this run's destination uses (bound to
+    ``lag_data_utils.clients.base.BaseClient``). A protocol-specific
+    subclass fixes ``ClientT`` to the narrowest client type its
+    destinations all share — e.g. ``BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient])``
+    — so that every subclass in the hierarchy agrees on one client type
+    for :meth:`build_client` and :meth:`sync_records`, rather than each
+    narrowing it independently and violating the Liskov substitution
+    principle. Domain logic that doesn't depend on ``ClientT`` (e.g. a
+    mixin for record dedup) can instead be layered in independently,
+    without joining this generic hierarchy at all.
 
     Notes
     -----
@@ -51,7 +65,7 @@ class BaseSyncRunner(ABC):
         ...
 
     @abstractmethod
-    def build_client(self, settings: Any) -> BaseClient:
+    def build_client(self, settings: Any) -> ClientT:
         """Construct the transport client for this run.
 
         Parameters
@@ -61,7 +75,7 @@ class BaseSyncRunner(ABC):
 
         Returns
         -------
-        BaseClient
+        ClientT
             A client ready to have
             :meth:`~lag_data_utils.clients.base.BaseClient.acquire_bearer_token`
             called on it.
@@ -80,12 +94,12 @@ class BaseSyncRunner(ABC):
         ...
 
     @abstractmethod
-    def sync_records(self, client: BaseClient, records: pd.DataFrame) -> Dict[str, int]:
+    def sync_records(self, client: ClientT, records: pd.DataFrame) -> Dict[str, int]:
         """Write each record to the destination system.
 
         Parameters
         ----------
-        client : BaseClient
+        client : ClientT
             An authenticated transport client, as returned by
             :meth:`build_client`.
         records : pd.DataFrame

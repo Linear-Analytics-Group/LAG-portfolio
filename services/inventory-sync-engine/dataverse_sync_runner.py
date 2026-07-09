@@ -1,15 +1,26 @@
 """Entrypoint for the ERP-to-Dataverse inventory sync.
 
-Wires together three layers and owns none of their logic itself:
+Wires together five collaborators and owns none of their logic itself:
 
-- ``lag_service_kit.runners.base.BaseSyncRunner`` — the destination- and
-  domain-agnostic sync algorithm (settings, logging, auth, read, write,
-  report).
-- ``runners.base.BaseInventorySyncRunner`` — the destination-agnostic
-  inventory domain logic (CSV reading, SKU dedup, the upsert loop).
-- ``runners.dataverse.DataverseInventorySyncRunner`` — the only
-  Dataverse-specific pieces: the ``lagsol_inventoryitems`` entity set, the
-  ``lagsol_skuid`` alternate key, and the ``lagsol_`` field mapping.
+- ``lag_service_kit.runners.base.BaseSyncRunner`` — the source-,
+  destination-, and domain-agnostic sync algorithm (settings, logging,
+  auth, read, write, report), generic over the transport client type.
+- ``runners.base.InventoryDomainMixin`` — source-agnostic,
+  protocol-agnostic inventory domain logic (SKU dedup, binding to a
+  composed source).
+- ``runners.odata.BaseODataInventorySyncRunner`` — domain-agnostic OData
+  v4 write-protocol logic (the idempotent alternate-key upsert loop),
+  reusable by any OData v4 destination.
+- ``runners.dataverse.DataverseInventorySyncRunner`` — combines the two
+  bases above and adds only the Dataverse-specific pieces: the
+  ``lagsol_inventoryitems`` entity set, the ``lagsol_skuid`` alternate
+  key, and the ``lagsol_`` field mapping.
+- ``sources.CsvInventorySource`` — the only source-specific piece:
+  reading the ERP CSV feed. Composed into the runner here, at the
+  entrypoint, rather than inherited — swapping to a different feed
+  format for this same Dataverse sync means passing a different
+  ``sources.InventorySource`` instance below, with no change to
+  ``DataverseInventorySyncRunner`` itself.
 
 Environment
 -----------
@@ -32,6 +43,7 @@ which sources process environment variables first and falls back to the
 """
 
 from runners.dataverse import DataverseInventorySyncRunner
+from sources import CsvInventorySource
 
 
 def main() -> int:
@@ -44,7 +56,7 @@ def main() -> int:
         ``1`` if configuration was invalid, Entra ID authentication failed,
         or any record failed to sync.
     """
-    return DataverseInventorySyncRunner().run()
+    return DataverseInventorySyncRunner(source=CsvInventorySource()).run()
 
 
 if __name__ == "__main__":
