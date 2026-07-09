@@ -268,7 +268,9 @@ class InventorySyncSettings(DataverseConnectionSettings, BaseServiceSettings):
   many directories separate it from that root.
 
 Missing or empty required fields raise `pydantic.ValidationError` with a
-field-by-field report, caught once in `main()` and logged.
+field-by-field report, caught once in `BaseSyncRunner.run()` (not by the
+service's own `main()`, which has no error handling of its own) and
+logged.
 
 ### `from_settings()` and structural typing
 
@@ -411,6 +413,7 @@ read-then-decide step that a second run could race against.
 ```text
 LAG-portfolio/
 ├── .env                                    # Local secrets — git-ignored, see .env.example
+├── .env.example                            # Template for the 5 variables config.py reads
 ├── platform/
 │   └── power-platform/
 │       └── LAGInventorySync/                # Configuration-as-Code Dataverse solution manifest
@@ -421,10 +424,12 @@ LAG-portfolio/
 │       ├── config.py                        # InventorySyncSettings
 │       ├── dataverse_sync_runner.py         # Entrypoint — main() instantiates a leaf runner
 │       ├── runners/                          # Domain + protocol axes — mixin composition (multiple inheritance)
+│       │   ├── __init__.py                   # Exports InventoryDomainMixin, BaseODataInventorySyncRunner
 │       │   ├── base.py                       # InventoryDomainMixin — dedupe, composes a source (no client type)
 │       │   ├── odata.py                      # BaseODataInventorySyncRunner — the OData v4 upsert loop
 │       │   └── dataverse.py                  # DataverseInventorySyncRunner — the only Dataverse-specific code
 │       ├── sources/                          # Source axis — composed into a runner, never inherited
+│       │   ├── __init__.py                   # Exports InventorySource, CsvInventorySource
 │       │   ├── base.py                       # InventorySource protocol
 │       │   └── csv.py                        # CsvInventorySource — the only CSV-specific code
 │       ├── generate_mock_data.py            # Mock ERP feed generator (dev/test only)
@@ -447,7 +452,8 @@ LAG-portfolio/
             ├── dedupe.py                      # dedupe_last_seen()
             ├── readers/                       # RecordReader, Csv/Json/Parquet
             └── runners/
-                └── base.py                    # BaseSyncRunner — destination-agnostic orchestration
+                ├── __init__.py                # Exports BaseSyncRunner
+                └── base.py                    # BaseSyncRunner[ClientT] — destination-agnostic orchestration
 ```
 
 ## Local environment setup
@@ -533,7 +539,8 @@ type information instead of silently degrading to `Any`.
 ## Project status
 
 Tracked against a phased public-release roadmap in `CLAUDE.md`. As of this
-document: dynamic execution and schema verification (Phase 1) and the
+document: dynamic execution and schema verification (Phase 1), the
 production refactor to Pydantic settings, structured logging, NumPy
-docstrings, and strict typing (Phase 2) are both complete and verified
-end-to-end against the live Dataverse environment.
+docstrings, and strict typing (Phase 2), and this document itself
+(Phase 3 — public-facing documentation) are complete. Phase 4 — git
+cleanliness and the public push to GitHub — is in progress.
