@@ -5,6 +5,12 @@ collapses duplicate SKU rows to their last-seen value, and idempotently PATCHes
 each resulting record into Dataverse via ``lagsol_inventoryitems`` using its
 ``lagsol_skuid`` alternate key.
 
+Every piece of this module besides :func:`sync_inventory_records` is generic
+scaffolding supplied by ``lag_service_kit`` (configuration, logging, record
+reading, dedup) and ``lag_data_utils`` (the Dataverse transport client).
+``sync_inventory_records`` is the one function specific to this service —
+it is the only place that knows what an inventory record looks like.
+
 Environment
 -----------
 AZURE_TENANT_ID : str
@@ -16,84 +22,35 @@ AZURE_CLIENT_SECRET : str
 DATAVERSE_URL : str
     Root URL of the target Dataverse environment
     (e.g., ``"https://org.crm.dynamics.com"``).
+LOG_LEVEL : str
+    Root logging level for the structured logging matrix. Optional,
+    defaults to ``"INFO"``.
 
-All four variables are read from a ``.env`` file at the repository root via
-``python-dotenv``.
+All variables are read via the :class:`config.InventorySyncSettings` schema,
+which sources process environment variables first and falls back to the
+``.env`` file at the repository root.
 """
 
-import os
-import sys
+import logging
 from pathlib import Path
 from typing import Any, Dict
 
 import pandas as pd
 import requests
-from dotenv import load_dotenv
+from pydantic import ValidationError
 
+from config import InventorySyncSettings
 from lag_data_utils.clients.dataverse import DataverseAuthenticationError, DataverseClient
+from lag_service_kit.dedupe import dedupe_last_seen
+from lag_service_kit.logging import configure_logging
+from lag_service_kit.readers import CsvRecordReader
 
-CSV_PATH = Path(__file__).parent / "data" / "erp_mock_inventory_data_feed.csv"
-ENTITY_SET = "lagsol_inventoryitems"
-ALTERNATE_KEY_FIELD = "lagsol_skuid"
+logger: logging.Logger = logging.getLogger(__name__)
 
-
-def load_erp_inventory_feed(csv_path: Path) -> pd.DataFrame:
-    """Load and deduplicate the mock ERP inventory feed.
-
-    Parameters
-    ----------
-    csv_path : Path
-        Path to the ERP feed CSV. Expected columns are ``sku_id``,
-        ``item_name``, and ``unit_price``.
-
-    Returns
-    -------
-    pd.DataFrame
-        One row per unique ``sku_id``. When a SKU appears more than once,
-        the last row for that SKU in file order is kept, treating the feed
-        as an append-only stream where later rows supersede earlier ones.
-
-    Raises
-    ------
-    FileNotFoundError
-        If ``csv_path`` does not exist.
-    """
-    feed = pd.read_csv(csv_path)
-    return feed.drop_duplicates(subset="sku_id", keep="last")
-
-
-def build_dataverse_client() -> DataverseClient:
-    """Construct a ``DataverseClient`` from environment configuration.
-
-    Returns
-    -------
-    DataverseClient
-        A client authenticated against the Dataverse environment identified
-        by ``DATAVERSE_URL``.
-
-    Raises
-    ------
-    RuntimeError
-        If any of ``AZURE_TENANT_ID``, ``AZURE_CLIENT_ID``,
-        ``AZURE_CLIENT_SECRET``, or ``DATAVERSE_URL`` is unset or empty.
-    """
-    required_vars = (
-        "AZURE_TENANT_ID",
-        "AZURE_CLIENT_ID",
-        "AZURE_CLIENT_SECRET",
-        "DATAVERSE_URL",
-    )
-    values = {name: os.getenv(name, "").strip() for name in required_vars}
-    missing = [name for name, value in values.items() if not value]
-    if missing:
-        raise RuntimeError(f"Missing required environment variable(s): {', '.join(missing)}")
-
-    return DataverseClient(
-        tenant_id=values["AZURE_TENANT_ID"],
-        client_id=values["AZURE_CLIENT_ID"],
-        client_secret=values["AZURE_CLIENT_SECRET"],
-        environment_url=values["DATAVERSE_URL"],
-    )
+CSV_PATH: Path = Path(__file__).parent / "data" / "erp_mock_inventory_data_feed.csv"
+ENTITY_SET: str = "lagsol_inventoryitems"
+ALTERNATE_KEY_FIELD: str = "lagsol_skuid"
+DEDUPE_KEY: str = "sku_id"
 
 
 def sync_inventory_records(client: DataverseClient, records: pd.DataFrame) -> Dict[str, int]:
@@ -104,8 +61,8 @@ def sync_inventory_records(client: DataverseClient, records: pd.DataFrame) -> Di
     client : DataverseClient
         An authenticated Dataverse client.
     records : pd.DataFrame
-        Deduplicated inventory records, as returned by
-        ``load_erp_inventory_feed``.
+        Deduplicated inventory records, with ``sku_id``, ``item_name``, and
+        ``unit_price`` columns.
 
     Returns
     -------
@@ -114,7 +71,7 @@ def sync_inventory_records(client: DataverseClient, records: pd.DataFrame) -> Di
         classified from each record's HTTP response status code
         (201 Created, 204 No Content) or a raised ``requests.HTTPError``.
     """
-    result = {"created": 0, "updated": 0, "failed": 0}
+    result: Dict[str, int] = {"created": 0, "updated": 0, "failed": 0}
 
     for row in records.itertuples(index=False):
         payload: Dict[str, Any] = {
@@ -129,7 +86,7 @@ def sync_inventory_records(client: DataverseClient, records: pd.DataFrame) -> Di
                 payload=payload,
             )
         except requests.HTTPError as exc:
-            print(f"FAILED sku_id={row.sku_id}: {exc}", file=sys.stderr)
+            logger.error("FAILED sku_id=%s: %s", row.sku_id, exc)
             result["failed"] += 1
             continue
 
@@ -148,26 +105,35 @@ def main() -> int:
     -------
     int
         Process exit code: ``0`` if every record synced without error,
-        ``1`` if any record failed or configuration was invalid.
+        ``1`` if configuration was invalid, Entra ID authentication failed,
+        or any record failed to sync.
     """
-    load_dotenv()
+    configure_logging()
 
     try:
-        client = build_dataverse_client()
-    except RuntimeError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
-    except DataverseAuthenticationError as exc:
-        print(f"Authentication error: {exc}", file=sys.stderr)
+        settings = InventorySyncSettings()  # type: ignore[call-arg]  # fields sourced from env/`.env`
+    except ValidationError as exc:
+        logger.error("Configuration error: %s", exc)
         return 1
 
-    records = load_erp_inventory_feed(CSV_PATH)
+    configure_logging(settings.log_level)
+
+    client = DataverseClient.from_settings(settings)
+    try:
+        client.acquire_bearer_token()
+    except DataverseAuthenticationError as exc:
+        logger.error("Authentication error: %s", exc)
+        return 1
+
+    records = dedupe_last_seen(CsvRecordReader().load(CSV_PATH), key=DEDUPE_KEY)
     result = sync_inventory_records(client, records)
 
-    print(
-        f"Sync complete: {result['created']} created, "
-        f"{result['updated']} updated, {result['failed']} failed "
-        f"(of {len(records)} records)."
+    logger.info(
+        "Sync complete: %d created, %d updated, %d failed (of %d records).",
+        result["created"],
+        result["updated"],
+        result["failed"],
+        len(records),
     )
     return 1 if result["failed"] else 0
 

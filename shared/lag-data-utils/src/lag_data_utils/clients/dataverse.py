@@ -1,8 +1,27 @@
-from typing import Dict, Optional
+"""Concrete Microsoft Dataverse OData v4 connector implementation."""
+
+from typing import Any, Dict, List, Optional, Protocol, cast, runtime_checkable
 
 import msal
 
 from .odata import ODataClient
+
+
+@runtime_checkable
+class DataverseConnectionSettings(Protocol):
+    """Structural contract for objects that can construct a ``DataverseClient``.
+
+    Any object exposing these four string attributes — for example a
+    Pydantic settings model from ``lag_service_kit`` — satisfies this
+    protocol and can be passed to ``DataverseClient.from_settings``.
+    ``lag_data_utils`` deliberately depends on no particular configuration
+    framework; this protocol describes only the shape it needs.
+    """
+
+    azure_tenant_id: str
+    azure_client_id: str
+    azure_client_secret: str
+    dataverse_url: str
 
 
 class DataverseAuthenticationError(Exception):
@@ -12,6 +31,7 @@ class DataverseAuthenticationError(Exception):
     actionable context without exposing raw MSAL response dictionaries to
     callers.
     """
+
     pass
 
 
@@ -99,14 +119,65 @@ class DataverseClient(ODataClient):
         client_secret: str,
         environment_url: str,
     ) -> None:
+        """Initialize the Dataverse connector and its MSAL confidential client.
+
+        Parameters
+        ----------
+        tenant_id : str
+            The Microsoft Entra ID tenant GUID for the target Dataverse
+            environment.
+        client_id : str
+            The application (client) ID of the registered Entra ID app with
+            Dataverse API permissions.
+        client_secret : str
+            The client secret credential for the registered Entra ID
+            application.
+        environment_url : str
+            The root URL of the target Dataverse environment. A trailing
+            slash is stripped automatically.
+
+        Returns
+        -------
+        None
+        """
         super().__init__()
-        self._environment_url = environment_url.rstrip("/")
-        self._msal_app = msal.ConfidentialClientApplication(
+        self._environment_url: str = environment_url.rstrip("/")
+        self._msal_app: msal.ConfidentialClientApplication = msal.ConfidentialClientApplication(
             client_id=client_id,
             client_credential=client_secret,
             authority=f"https://login.microsoftonline.com/{tenant_id}",
         )
-        self._scope = [f"{self._environment_url}/.default"]
+        self._scope: List[str] = [f"{self._environment_url}/.default"]
+
+    # ------------------------------------------------------------------
+    # Alternate constructor
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_settings(cls, settings: DataverseConnectionSettings) -> "DataverseClient":
+        """Construct a ``DataverseClient`` from any object satisfying `DataverseConnectionSettings`.
+
+        Parameters
+        ----------
+        settings : DataverseConnectionSettings
+            Any object exposing ``azure_tenant_id``, ``azure_client_id``,
+            ``azure_client_secret``, and ``dataverse_url`` attributes (e.g.,
+            a ``lag_service_kit.dataverse_settings.DataverseConnectionSettings``
+            instance). This client has no dependency on whatever
+            configuration framework produced ``settings``.
+
+        Returns
+        -------
+        DataverseClient
+            A client authenticated against the Dataverse environment
+            identified by ``settings.dataverse_url``.
+        """
+        return cls(
+            tenant_id=settings.azure_tenant_id,
+            client_id=settings.azure_client_id,
+            client_secret=settings.azure_client_secret,
+            environment_url=settings.dataverse_url,
+        )
 
     # ------------------------------------------------------------------
     # BaseClient contract
@@ -141,14 +212,14 @@ class DataverseClient(ODataClient):
         internal refresh threshold (approximately 5 minutes before expiry),
         eliminating unnecessary authentication network traffic.
         """
-        result: Optional[Dict] = self._msal_app.acquire_token_silent(
+        result: Optional[Dict[str, Any]] = self._msal_app.acquire_token_silent(
             scopes=self._scope, account=None
         )
         if not result:
             result = self._msal_app.acquire_token_for_client(scopes=self._scope)
 
         if not result or "access_token" not in result:
-            error_description = (result or {}).get(
+            error_description: str = (result or {}).get(
                 "error_description",
                 "No error description returned by Microsoft Entra ID.",
             )
@@ -156,7 +227,7 @@ class DataverseClient(ODataClient):
                 f"Failed to acquire Bearer token from Microsoft Entra ID: {error_description}"
             )
 
-        return result["access_token"]
+        return cast(str, result["access_token"])
 
     # ------------------------------------------------------------------
     # ODataClient contract

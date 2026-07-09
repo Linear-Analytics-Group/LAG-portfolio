@@ -1,3 +1,5 @@
+"""Protocol-agnostic root of the Linear Analytics Group connector hierarchy."""
+
 from abc import ABC, abstractmethod
 
 
@@ -29,8 +31,8 @@ class BaseClient(ABC):
     --------
     Introducing a new connector family by subclassing ``BaseClient``:
 
+    >>> # Abstract OData v4 connector with standardized HTTP operations.
     >>> class ODataClient(BaseClient):
-    ...     \"\"\"Abstract OData v4 connector with standardized HTTP operations.\"\"\"
     ...     @property
     ...     @abstractmethod
     ...     def base_url(self) -> str: ...
