@@ -27,24 +27,40 @@ LAG-portfolio/
 │       ├── generate_mock_data.py         # Mock ERP feed generator (dev/test only)
 │       ├── test_connection.py            # Standalone MSAL/Dataverse connectivity smoke test
 │       ├── requirements.txt
-│       └── sync_runner.py                # Application entrypoint & orchestrator [ACTIVE WORK FRONT]
+│       ├── config.py                     # InventorySyncSettings — composes shared settings mixins
+│       └── sync_runner.py                # Orchestration + sync_inventory_records (the only
+│                                          # service-specific logic) [ACTIVE WORK FRONT]
 │
 └── shared/
-    └── lag-data-utils/                   # Distributable utility library layer [STABILIZED]
-        ├── pyproject.toml                # PEP 517/660 build config (Hatchling backend)
+    ├── lag-data-utils/                   # Transport client layer [STABILIZED]
+    │   ├── pyproject.toml                # PEP 517/660 build config (Hatchling backend)
+    │   └── src/
+    │       └── lag_data_utils/
+    │           ├── __init__.py
+    │           └── clients/
+    │               ├── __init__.py
+    │               ├── base.py           # Abstract root — authentication contract only
+    │               ├── odata.py          # Abstract OData v4 client (generic CRUD, protocol-only)
+    │               └── dataverse.py      # Concrete Dataverse client (MSAL auth + Dataverse
+    │                                     # headers) + DataverseConnectionSettings Protocol +
+    │                                     # DataverseClient.from_settings() alternate constructor
+    │
+    └── lag-service-kit/                  # Cross-service scaffolding layer
+        ├── pyproject.toml
         └── src/
-            └── lag_data_utils/
+            └── lag_service_kit/
                 ├── __init__.py
-                └── clients/
-                    ├── __init__.py
-                    ├── base.py           # Abstract root — authentication contract only
-                    ├── odata.py          # Abstract OData v4 client (generic CRUD, protocol-only)
-                    └── dataverse.py      # Concrete Dataverse client (MSAL auth + Dataverse headers)
+                ├── settings.py           # BaseServiceSettings (log_level) + find_repo_env_file()
+                ├── dataverse_settings.py # DataverseConnectionSettings Pydantic mixin
+                ├── logging.py            # configure_logging() — structured logging matrix
+                ├── dedupe.py             # dedupe_last_seen() — last-write-wins by key column
+                └── readers/              # RecordReader protocol + Csv/Json/Parquet implementations
 ```
 
-`lag-data-utils` is installed into `.venv` as an editable package
-(`pip install -e ./shared/lag-data-utils`), so imports resolve as
-`from lag_data_utils.clients.dataverse import DataverseClient` — no path
+Both `shared/` packages are installed into `.venv` as editable packages
+(`pip install -e ./shared/lag-data-utils`, `pip install -e ./shared/lag-service-kit`),
+so imports resolve as `from lag_data_utils.clients.dataverse import DataverseClient`
+and `from lag_service_kit.settings import BaseServiceSettings` — no path
 manipulation hacks.
 
 ## Architectural Directives (Enforced)
@@ -52,10 +68,29 @@ manipulation hacks.
 These constraints govern all code generation, refactoring, and documentation
 in this repo. They are not advisory.
 
-1. **Maintain architectural separation.** Database transport clients live in
-   `shared/lag-data-utils`. Execution orchestration, column mappings, and
-   ingestion targets live in `services/inventory-sync-engine`. Never combine
-   these layers in a single file.
+1. **Maintain architectural separation.** Three layers, never combined in a
+   single file:
+   - `shared/lag-data-utils` — database transport clients only. No
+     environment reads, no config framework, no business logic.
+   - `shared/lag-service-kit` — cross-service scaffolding any current or
+     future service needs regardless of destination system: Pydantic
+     settings base classes, structured logging setup, input-format readers
+     (CSV/JSON/Parquet), generic dedup utilities. No Dataverse- or
+     inventory-specific knowledge.
+   - `services/<service-name>` — execution orchestration, column mappings,
+     ingestion targets, and whatever business logic is genuinely specific
+     to that service (e.g., `sync_inventory_records` in `sync_runner.py`).
+     A service's own code should be the thinnest layer; if a function has
+     no service-specific knowledge in it, it belongs in `lag-service-kit`
+     instead.
+
+   `lag-data-utils` stays free of any configuration-framework dependency
+   (currently Pydantic) so it can be reused regardless of how a service
+   manages its config: concrete clients expose a `from_settings()`
+   alternate constructor typed against a structural `typing.Protocol`
+   (see `DataverseConnectionSettings` in `dataverse.py`) rather than
+   importing a concrete settings class from `lag-service-kit`.
+
    Within `clients/`, the transport hierarchy builds strictly on
    specificity — `BaseClient` → `ODataClient` → `DataverseClient`. Generic
    OData v4 protocol mechanics (CRUD verbs, `$filter`/`$select`/`$top`
@@ -108,7 +143,7 @@ alias gpsync="gporigin && gpcloud"                                # Double-vault
 Tracking against the public-release roadmap. Work top-down; do not start a
 later phase until the one above it is checked off.
 
-- [X] **Phase 1 — Dynamic Execution & Schema Verification** *(current)*
+- [X] **Phase 1 — Dynamic Execution & Schema Verification**
   - Run `python3 sync_runner.py` from `services/inventory-sync-engine/` —
     confirm namespace bindings, editable install paths, and `.env` lookups
     all resolve without error.
@@ -116,7 +151,7 @@ later phase until the one above it is checked off.
     logical names in the Power Apps Maker Portal.
   - Validate idempotency: run the sync script twice — second run must return
     `204 No Content`, not a constraint violation or duplicate record error.
-- [ ] **Phase 2 — Production Code Refactoring**
+- [X] **Phase 2 — Production Code Refactoring**
   - Add pydantic and pydantic-settings to our runtime dependency array.
   - Implement a unified configuration schema (config.py) to replace all instance variables of load_dotenv().
   - Replace all stdout print() statements with a properly configured, structured Python logging matrix.
@@ -124,7 +159,7 @@ later phase until the one above it is checked off.
     `clients/odata.py`, `clients/dataverse.py`, and `sync_runner.py`.
   - Inject strict type annotations across all execution paths in those three
     files.
-- [ ] **Phase 3 — Public-Facing Documentation (`README.md`)**
+- [ ] **Phase 3 — Public-Facing Documentation (`README.md`)** *(current)*
   - Draft root `README.md`: business problem solved, architectural rationale
     for the transport/application layer split, local environment
     bootstrapping guide.
@@ -137,3 +172,4 @@ later phase until the one above it is checked off.
   - Commit with conventional syntax:
     `feat(sync-engine): finalized modular provider validation and enterprise documentation`
   - Run `gpsync` (double-vault push).
+

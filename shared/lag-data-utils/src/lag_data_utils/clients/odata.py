@@ -1,5 +1,7 @@
+"""Abstract OData v4 protocol layer shared by all OData-compliant connectors."""
+
 from abc import abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import requests
 
@@ -67,7 +69,13 @@ class ODataClient(BaseClient):
     """
 
     def __init__(self) -> None:
-        self._session = requests.Session()
+        """Initialize the underlying HTTP session for this connector instance.
+
+        Returns
+        -------
+        None
+        """
+        self._session: requests.Session = requests.Session()
 
     # ------------------------------------------------------------------
     # Abstract interface — must be implemented by concrete subclasses
@@ -257,7 +265,7 @@ class ODataClient(BaseClient):
             params["$select"] = ",".join(select_fields)
         response = self._session.get(url, params=params, headers=self._get_headers())
         response.raise_for_status()
-        return response.json()
+        return cast(Dict[str, Any], response.json())
 
     def query_records(
         self,
@@ -329,7 +337,7 @@ class ODataClient(BaseClient):
             params["$orderby"] = order_by
         response = self._session.get(url, params=params, headers=self._get_headers())
         response.raise_for_status()
-        return response.json().get("value", [])
+        return cast(List[Dict[str, Any]], response.json().get("value", []))
 
     def delete_record(
         self,
