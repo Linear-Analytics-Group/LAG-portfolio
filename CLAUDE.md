@@ -160,12 +160,27 @@ later phase until the one above it is checked off.
   - Inject strict type annotations across all execution paths in those three
     files.
 - [ ] **Phase 3 — Public-Facing Documentation (`README.md`)** *(current)*
-  - Draft root `README.md`: business problem solved, architectural rationale
-    for the transport/application layer split, local environment
-    bootstrapping guide.
-  - Embed a Mermaid sequence diagram: `Local CSV → Pandas deduplication
-    filter → MSAL client credential handshake → Idempotent Dataverse OData
-    PATCH (Alternate Key)`.
+  - Draft root `README.md`: business problem solved; architectural rationale
+    for the three-tier split — `lag-data-utils` (transport clients),
+    `lag-service-kit` (cross-service scaffolding: config, logging, readers,
+    dedup), `services/inventory-sync-engine` (orchestration + the one
+    inventory-specific function) — and why scaffolding lives in its own
+    package rather than growing either the transport layer or a single
+    service; local environment bootstrapping guide covering both editable
+    installs (`pip install -e ./shared/lag-data-utils`,
+    `pip install -e ./shared/lag-service-kit`).
+  - Document the settings composition pattern: `InventorySyncSettings`
+    combines `DataverseConnectionSettings` + `BaseServiceSettings` from
+    `lag-service-kit`, and `DataverseClient.from_settings()` accepts any
+    object structurally matching a `typing.Protocol` — so `lag-data-utils`
+    depends on no particular configuration framework.
+  - Document the `RecordReader` protocol and that CSV/JSON/Parquet input is
+    already supported today (`lag_service_kit.readers`), not just CSV —
+    accurate scope, not aspirational.
+  - Embed a Mermaid sequence diagram reflecting what's actually built:
+    `Local CSV (CsvRecordReader) → dedupe_last_seen(key="sku_id") →
+    DataverseClient.from_settings() + eager MSAL bearer-token acquisition →
+    Idempotent Dataverse OData PATCH (Alternate Key)`.
 - [ ] **Phase 4 — Git Cleanliness & Public Push**
   - Run `git status` — confirm `.env`, local databases, scratch files, and
     raw config states are excluded from tracking.
