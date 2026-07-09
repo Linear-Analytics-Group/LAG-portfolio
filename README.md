@@ -1,8 +1,8 @@
 # LAG Dataverse OData Sync Engine
 
-A Python service that migrates ERP inventory data into Microsoft Dataverse
-via the OData Web API- built as a reusable foundation for future
-Dataverse-backed integrations.
+A Python service that migrates ERP inventory data into Microsoft Dataverse via 
+the OData Web API, utilizing an extensible, multi-layer architecture designed 
+to readily adopt alternative enterprise destination systems.
 
 ## The business problem
 
@@ -10,7 +10,7 @@ Inventory data lives in an ERP system as a flat, append-only feed. Microsoft
 Dataverse — the system of record for downstream Power Platform apps — needs
 that data kept in sync.  This sync should be maintained without creating 
 duplicate records, without needing manual reconciliation, and without making 
-assumptions regarding input format or destination.
+format assumptions related to the source or destination.
 
 This solution  solves three key problems:
 
@@ -22,7 +22,7 @@ This solution  solves three key problems:
    formats (e.g. CSV, JSON, Parquet) and solutions.
 3. **Operable beyond simple execution.** Structured machine-parseable logs, 
    validated configuration, and strict typing make failures diagnosable in 
-   production  and support integration with external log solutions
+   production and support integration with external log solutions
    (e.g. Azure Monitor Log Analytics, Datadog, ELK Stack, etc.)
 
 ## Architecture
@@ -78,35 +78,36 @@ graph TD
 ### Why three layers, not two
 
 The obvious split is "library vs. application" — transport code in
-`lag-data-utils`, everything else in the service. That's what this repo
-started with. It breaks down the moment you imagine a *second* service:
-config loading, logging setup, and "read this file format into a
-DataFrame" would either get copy-pasted into every new service, or bolted
-onto `lag-data-utils` until it stopped being a clean transport layer.
+`lag-data-utils`, everything else in the service. That approach fails to
+support additional services (e.g., config loading, logging setup, and 
+"read this file format into a DataFrame").  Each new service would result in 
+duplicated code or a bloated transport layer, compromising the clean boundaries 
+of `lag-data-utils`, therefore preventing delivery of a clean and maintainable 
+transport layer.
 
-`lag-service-kit` exists to hold exactly the code that is reusable across
-*any* future service but isn't a transport concern — and to do that without
-making the transport layer depend on a specific configuration framework.
+`lag-service-kit` exists to hold code and logic that is reusable across
+*any* future service but isn't a transport concern.  This approach prevents
+the transport layer dependency on any specific configuration framework. 
 Concretely:
 
 - `lag-data-utils` has zero dependency on Pydantic or any settings library.
   `DataverseClient.from_settings()` is typed against a structural
   `typing.Protocol` (`DataverseConnectionSettings` in `dataverse.py`) —
   any object exposing the right four attributes works, regardless of what
-  produced it. Today that's a Pydantic model from `lag-service-kit`;
-  tomorrow it could be anything.
+  produced it.
 - `lag-service-kit` depends on Pydantic and pandas, but knows nothing about
-  Dataverse alternate keys or inventory columns — a service that talks to
-  a different destination system, or ingests a different kind of record,
-  reuses it unchanged.
-- The service's destination-specific leaf class is the thinnest layer of
-  all. `DataverseInventorySyncRunner` (`runners/dataverse.py`) contributes
-  exactly `entity_set`, `alternate_key_field`, `load_settings()`,
-  `build_client()`, and `build_payload()` — nothing else — and every other
-  behavior (CSV read, dedup, the upsert loop, settings/auth/logging
-  orchestration) is inherited unchanged. `dataverse_sync_runner.py` itself
-  is reduced to a single line of business logic: which leaf class to
-  instantiate and run.
+  Dataverse alternate keys or inventory columns — any service that talks to
+  a different destination system or ingests a different kind of record can
+  leverage this kit out of the box.
+- The service's destination-specific leaf class is the thinnest layer - housing
+  destination-specific implementations. 
+    - `DataverseInventorySyncRunner` (`runners/dataverse.py`) contributes 
+    exactly `entity_set`, `alternate_key_field`, `load_settings()`,
+    `build_client()`, and `build_payload()`.  
+    - All other implemented behavior (e.g., CSV read, dedup, the upsert loop, 
+    settings/auth/logging, orchestration, etc.) is inherited. 
+    - `dataverse_sync_runner.py` is reduced to implementation-specific business
+    logic: which leaf class to instantiate and run.
 
 ### Layering the sync runner like the transport clients
 
