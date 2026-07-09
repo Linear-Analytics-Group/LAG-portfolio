@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Protocol, cast, runtime_checkable
 
 import msal
 
+from .base import AuthenticationError
 from .odata import ODataClient
 
 
@@ -24,12 +25,14 @@ class DataverseConnectionSettings(Protocol):
     dataverse_url: str
 
 
-class DataverseAuthenticationError(Exception):
+class DataverseAuthenticationError(AuthenticationError):
     """Raised when the Microsoft Entra ID token acquisition flow fails.
 
     Wraps the error description returned by the MSAL library to provide
     actionable context without exposing raw MSAL response dictionaries to
-    callers.
+    callers. Subclasses ``lag_data_utils.clients.base.AuthenticationError``
+    so destination-agnostic orchestration code can catch authentication
+    failures without importing this Dataverse-specific type.
     """
 
     pass

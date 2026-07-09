@@ -28,7 +28,7 @@ LAG-portfolio/
 │       ├── test_connection.py            # Standalone MSAL/Dataverse connectivity smoke test
 │       ├── requirements.txt
 │       ├── config.py                     # InventorySyncSettings — composes shared settings mixins
-│       └── sync_runner.py                # Orchestration + sync_inventory_records (the only
+│       └── dataverse_sync_runner.py                # Orchestration + sync_inventory_records (the only
 │                                          # service-specific logic) [ACTIVE WORK FRONT]
 │
 └── shared/
@@ -79,7 +79,7 @@ in this repo. They are not advisory.
      inventory-specific knowledge.
    - `services/<service-name>` — execution orchestration, column mappings,
      ingestion targets, and whatever business logic is genuinely specific
-     to that service (e.g., `sync_inventory_records` in `sync_runner.py`).
+     to that service (e.g., `sync_inventory_records` in `dataverse_sync_runner.py`).
      A service's own code should be the thinnest layer; if a function has
      no service-specific knowledge in it, it belongs in `lag-service-kit`
      instead.
@@ -108,6 +108,21 @@ in this repo. They are not advisory.
    must pass a strict technical audit bar: explicit `Parameters`, `Returns`,
    and `Raises` sections (NumPy-style). No qualitative filler, no emotional
    framing — technical benchmarks and verifiable API states only.
+4. **Extend the layering pattern beyond the transport clients.** The
+   base-class-to-specific-subclass shape established in
+   `shared/lag-data-utils/clients` (`BaseClient` → `ODataClient` →
+   `DataverseClient`) is the standing pattern for this repository, not a
+   one-off. Apply it at every layer where a service must support more than
+   one destination, source format, or record shape: a destination-agnostic
+   base class owns the shared orchestration/algorithm, and solution-specific
+   subclasses inherit it and override or add only what differs for that
+   destination — e.g., a `BaseInventorySyncRunner` in `lag-service-kit`
+   subclassed by `DataverseInventorySyncRunner` today, with future
+   `SapInventorySyncRunner` / `SalesforceInventorySyncRunner` subclasses
+   under `services/inventory-sync-engine/runners/`. Default to this shape
+   when adding a new destination, source format, or service — modularity
+   and scalability take precedence over the shortest path to a working
+   single-destination implementation.
 
 ## Dataverse Environment Reference
 
@@ -144,10 +159,10 @@ Tracking against the public-release roadmap. Work top-down; do not start a
 later phase until the one above it is checked off.
 
 - [X] **Phase 1 — Dynamic Execution & Schema Verification**
-  - Run `python3 sync_runner.py` from `services/inventory-sync-engine/` —
+  - Run `python3 dataverse_sync_runner.py` from `services/inventory-sync-engine/` —
     confirm namespace bindings, editable install paths, and `.env` lookups
     all resolve without error.
-  - Reconcile OData field casing in `sync_runner.py` payloads against literal
+  - Reconcile OData field casing in `dataverse_sync_runner.py` payloads against literal
     logical names in the Power Apps Maker Portal.
   - Validate idempotency: run the sync script twice — second run must return
     `204 No Content`, not a constraint violation or duplicate record error.
@@ -156,7 +171,7 @@ later phase until the one above it is checked off.
   - Implement a unified configuration schema (config.py) to replace all instance variables of load_dotenv().
   - Replace all stdout print() statements with a properly configured, structured Python logging matrix.
   - Standardize NumPy-style docstrings across `clients/base.py`,
-    `clients/odata.py`, `clients/dataverse.py`, and `sync_runner.py`.
+    `clients/odata.py`, `clients/dataverse.py`, and `dataverse_sync_runner.py`.
   - Inject strict type annotations across all execution paths in those three
     files.
 - [X] **Phase 3 — Public-Facing Documentation (`README.md`)**

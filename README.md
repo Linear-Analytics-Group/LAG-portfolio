@@ -1,44 +1,47 @@
 # LAG Dataverse OData Sync Engine
 
 A Python service that migrates ERP inventory data into Microsoft Dataverse
-via the OData Web API, built as a reusable foundation for future
-Dataverse-backed integrations rather than a single-purpose script.
+via the OData Web API- built as a reusable foundation for future
+Dataverse-backed integrations.
 
 ## The business problem
 
 Inventory data lives in an ERP system as a flat, append-only feed. Microsoft
 Dataverse — the system of record for downstream Power Platform apps — needs
-that data kept in sync without ever creating duplicate records, without a
-human reconciling the two systems by hand, and without assuming any single
-input format or destination will be the last one this organization ever
-needs.
+that data kept in sync.  This sync should be maintained without creating 
+duplicate records, without needing manual reconciliation, and without making 
+assumptions regarding input format or destination.
 
-Concretely, this repository solves three problems at once:
+This solution  solves three key problems:
 
-1. **Sync inventory records into Dataverse idempotently.** Re-running the
-   sync must never create duplicates or corrupt existing records, even if
-   the previous run crashed halfway through.
-2. **Do it without hardcoding today's shape of the problem.** Today the
-   source is a CSV and the destination is Dataverse. Neither is guaranteed
-   to stay that way, so the parts of the solution that aren't specific to
-   *inventory* or *Dataverse* are built to outlive both.
-3. **Make it operable, not just runnable.** Structured logs, validated
-   configuration, and strict typing so failures are diagnosable in
-   production, not just on someone's laptop.
+1. **Sync inventory records into Dataverse idempotently.** The sync prevents
+   record duplication, preventing the creation of duplicate or corrupt records, 
+   even when prior runs fail.
+2. **Source and Destination Agnostic.** Modular architecture separates the
+   service kit from the service- supporting various source and destination
+   formats (e.g. CSV, JSON, Parquet) and solutions.
+3. **Operable beyond simple execution.** Structured machine-parseable logs, 
+   validated configuration, and strict typing make failures diagnosable in 
+   production  and support integration with external log solutions
+   (e.g. Azure Monitor Log Analytics, Datadog, ELK Stack, etc.)
 
 ## Architecture
 
-The repository is split into three layers, each with a single
-responsibility and a one-way dependency on the layer below it:
+The repository is split into three layers, supporting separation of concerns.
+Each layer holds a single responsibility and one-way dependency on the layer 
+below it:
 
 ```mermaid
 graph TD
     subgraph "services/inventory-sync-engine — orchestration"
-        SR["sync_runner.py<br/>main() + sync_inventory_records()"]
+        EP["dataverse_sync_runner.py<br/>main()"]
+        DISR["runners/dataverse.py<br/>DataverseInventorySyncRunner"]
+        BISR["runners/base.py<br/>BaseInventorySyncRunner"]
         CFG["config.py<br/>InventorySyncSettings"]
     end
 
     subgraph "shared/lag-service-kit — cross-service scaffolding"
+        BSR["runners/base.py<br/>BaseSyncRunner"]
         BSS["settings.py<br/>BaseServiceSettings, find_repo_env_file()"]
         DCS["dataverse_settings.py<br/>DataverseConnectionSettings"]
         LOG["logging.py<br/>configure_logging()"]
@@ -47,27 +50,30 @@ graph TD
     end
 
     subgraph "shared/lag-data-utils — transport clients"
-        BASE["base.py<br/>BaseClient"]
+        BASE["base.py<br/>BaseClient, AuthenticationError"]
         ODATA["odata.py<br/>ODataClient"]
         DV["dataverse.py<br/>DataverseClient"]
     end
 
+    EP --> DISR
+    DISR -->|inherits| BISR
+    BISR -->|inherits| BSR
     CFG -->|inherits| BSS
     CFG -->|inherits| DCS
-    SR --> CFG
-    SR --> LOG
-    SR --> RDR
-    SR --> DEDUPE
-    SR --> DV
+    DISR --> CFG
+    DISR --> DV
+    BISR --> RDR
+    BISR --> DEDUPE
+    BSR --> LOG
     DV --> ODATA --> BASE
     DV -.->|"from_settings() accepts anything<br/>matching the Protocol"| DCS
 ```
 
 | Layer | Package | Owns | Must never contain |
 |---|---|---|---|
-| Transport | `shared/lag-data-utils` | HTTP/OData mechanics, MSAL auth, Dataverse-specific headers | Environment reads, a config framework, business logic |
-| Scaffolding | `shared/lag-service-kit` | Settings base classes, structured logging, input-format readers, generic dedup | Dataverse-specific or inventory-specific knowledge |
-| Orchestration | `services/inventory-sync-engine` | Wiring, column mappings, the one function that knows what an inventory record is | Anything reusable by a service that isn't this one |
+| Transport | `shared/lag-data-utils` | HTTP/OData mechanics, MSAL auth, Dataverse-specific headers, the `AuthenticationError` hierarchy | Environment reads, a config framework, business logic |
+| Scaffolding | `shared/lag-service-kit` | Settings base classes, structured logging, input-format readers, generic dedup, the destination-agnostic `BaseSyncRunner` orchestration algorithm | Dataverse-specific or inventory-specific knowledge |
+| Orchestration | `services/inventory-sync-engine` | The inventory-domain `BaseInventorySyncRunner` (CSV read, dedup, upsert loop) plus one destination leaf class per target system (`DataverseInventorySyncRunner` today) | Anything reusable by a service that isn't this one |
 
 ### Why three layers, not two
 
@@ -93,11 +99,43 @@ Concretely:
   Dataverse alternate keys or inventory columns — a service that talks to
   a different destination system, or ingests a different kind of record,
   reuses it unchanged.
-- The service itself should be the thinnest layer. In
-  `sync_runner.py`, `sync_inventory_records()` is the *only* function that
-  knows what an inventory record looks like (`sku_id`, `item_name`,
-  `unit_price`, the `lagsol_inventoryitems` entity set). Everything else in
-  that file is wiring into the two shared packages.
+- The service's destination-specific leaf class is the thinnest layer of
+  all. `DataverseInventorySyncRunner` (`runners/dataverse.py`) contributes
+  exactly `entity_set`, `alternate_key_field`, `load_settings()`,
+  `build_client()`, and `build_payload()` — nothing else — and every other
+  behavior (CSV read, dedup, the upsert loop, settings/auth/logging
+  orchestration) is inherited unchanged. `dataverse_sync_runner.py` itself
+  is reduced to a single line of business logic: which leaf class to
+  instantiate and run.
+
+### Layering the sync runner like the transport clients
+
+The transport hierarchy (`BaseClient` → `ODataClient` → `DataverseClient`)
+isn't a one-off pattern reserved for connectors — the sync runner is built
+the same way, for the same reason: a base class owns the parts of the
+algorithm that never vary, and each new variant contributes only what's
+genuinely specific to it.
+
+- `lag_service_kit.runners.base.BaseSyncRunner` — the outermost, fully
+  generic layer. Knows the *shape* of a sync run (load settings → configure
+  logging → authenticate → read records → write records → report results)
+  but nothing about inventory, CSVs, or Dataverse. It lives in
+  `lag-service-kit`, not the service, because every future service — not
+  just this one — needs this same shape.
+- `services/inventory-sync-engine/runners/base.py:BaseInventorySyncRunner`
+  — the inventory-domain layer. Knows what an inventory record is
+  (`sku_id`, `item_name`, `unit_price`), how to read and dedupe the ERP
+  CSV feed, and how to drive the generic `upsert_record` loop against
+  *any* OData v4 client. Still knows nothing about Dataverse specifically.
+- `services/inventory-sync-engine/runners/dataverse.py:DataverseInventorySyncRunner`
+  — the destination leaf. The only code in the service that knows
+  `lagsol_inventoryitems`, `lagsol_skuid`, and the `lagsol_` field mapping.
+
+Adding a second destination — SAP, Salesforce — means writing a sibling
+leaf class (e.g. `runners/sap.py`) that inherits `BaseInventorySyncRunner`
+and supplies its own settings, client, entity set, alternate key, and
+payload mapping. Neither `BaseSyncRunner` nor `BaseInventorySyncRunner`
+changes to support it.
 
 ## Key design patterns
 
@@ -159,17 +197,21 @@ class RecordReader(Protocol):
 
 with three implementations shipped today — `CsvRecordReader`,
 `JsonRecordReader` (expects `orient="records"` JSON), and
-`ParquetRecordReader`. The inventory sync engine uses `CsvRecordReader`
-because that's what the ERP feed happens to be today; swapping to JSON or
-Parquet is a one-line change in `sync_runner.py`, not a rewrite. Business
-logic downstream of a reader (`dedupe_last_seen`, `sync_inventory_records`)
-only ever depends on the resulting `DataFrame`, never on the source format.
+`ParquetRecordReader`. `BaseInventorySyncRunner.load_records()` uses
+`CsvRecordReader` because that's what the ERP feed happens to be today;
+swapping to JSON or Parquet means overriding `load_records()` in a leaf
+class — one method, not a rewrite — and never touches the client, the
+settings composition, or the upsert loop in `sync_records()`. Both
+methods only ever depend on the resulting `DataFrame`, never on the
+source format.
 
 ## Execution flow
 
 ```mermaid
 sequenceDiagram
-    participant Runner as sync_runner.main()
+    participant Main as dataverse_sync_runner.main()
+    participant Runner as BaseSyncRunner.run()
+    participant Leaf as DataverseInventorySyncRunner
     participant Settings as InventorySyncSettings
     participant Client as DataverseClient
     participant Entra as Microsoft Entra ID
@@ -177,30 +219,39 @@ sequenceDiagram
     participant Dedupe as dedupe_last_seen()
     participant Dataverse as Dataverse Web API (v9.2)
 
-    Runner->>Settings: InventorySyncSettings()
+    Main->>Leaf: DataverseInventorySyncRunner()
+    Main->>Runner: .run()
+
+    Runner->>Leaf: load_settings()
+    Leaf->>Settings: InventorySyncSettings()
     alt required field missing/empty
         Settings-->>Runner: ValidationError
-        Runner->>Runner: log + exit 1
+        Runner->>Runner: log + return 1
     end
     Settings-->>Runner: validated config
 
-    Runner->>Client: DataverseClient.from_settings(settings)
+    Runner->>Leaf: build_client(settings)
+    Leaf-->>Runner: DataverseClient.from_settings(settings)
     Runner->>Client: acquire_bearer_token()
     Client->>Entra: OAuth2 client-credentials grant (MSAL)
     alt credentials rejected
         Entra-->>Client: AADSTS error
-        Client-->>Runner: DataverseAuthenticationError
-        Runner->>Runner: log + exit 1
+        Client-->>Runner: DataverseAuthenticationError (is-a AuthenticationError)
+        Runner->>Runner: log + return 1
     end
     Entra-->>Client: Bearer token (cached for reuse)
 
-    Runner->>Reader: load(CSV_PATH)
-    Reader-->>Runner: raw DataFrame (sku_id, item_name, unit_price)
-    Runner->>Dedupe: dedupe_last_seen(df, key="sku_id")
-    Dedupe-->>Runner: one row per sku_id (last-seen wins)
+    Runner->>Leaf: load_records()
+    Leaf->>Reader: load(csv_path)
+    Reader-->>Leaf: raw DataFrame (sku_id, item_name, unit_price)
+    Leaf->>Dedupe: dedupe_last_seen(df, key="sku_id")
+    Dedupe-->>Leaf: one row per sku_id (last-seen wins)
+    Leaf-->>Runner: deduplicated records
 
+    Runner->>Leaf: sync_records(client, records)
     loop each deduplicated record
-        Runner->>Client: upsert_record(entity_set="lagsol_inventoryitems",<br/>alternate_key_name="lagsol_skuid", key_value=sku_id, payload)
+        Leaf->>Leaf: build_payload(row)
+        Leaf->>Client: upsert_record(entity_set="lagsol_inventoryitems",<br/>alternate_key_name="lagsol_skuid", key_value=sku_id, payload)
         Client->>Dataverse: HTTP PATCH /lagsol_inventoryitems(lagsol_skuid='...')
         alt record didn't exist
             Dataverse-->>Client: 201 Created
@@ -208,11 +259,13 @@ sequenceDiagram
             Dataverse-->>Client: 204 No Content
         else request rejected
             Dataverse-->>Client: 4xx/5xx
-            Client-->>Runner: requests.HTTPError (logged, counted, loop continues)
+            Client-->>Leaf: requests.HTTPError (logged, counted, loop continues)
         end
     end
+    Leaf-->>Runner: created/updated/failed counts
 
-    Runner->>Runner: log created/updated/failed tally, exit 0 or 1
+    Runner->>Runner: log tally, return 0 or 1
+    Runner-->>Main: exit code
 ```
 
 Re-running the sync is safe by construction: `upsert_record` issues an
@@ -233,7 +286,10 @@ LAG-portfolio/
 ├── services/
 │   └── inventory-sync-engine/
 │       ├── config.py                        # InventorySyncSettings
-│       ├── sync_runner.py                   # Orchestration + sync_inventory_records()
+│       ├── dataverse_sync_runner.py         # Entrypoint — main() instantiates a leaf runner
+│       ├── runners/
+│       │   ├── base.py                       # BaseInventorySyncRunner — CSV read, dedupe, upsert loop
+│       │   └── dataverse.py                  # DataverseInventorySyncRunner — the only Dataverse-specific code
 │       ├── generate_mock_data.py            # Mock ERP feed generator (dev/test only)
 │       ├── test_connection.py               # Standalone MSAL/Dataverse smoke test
 │       ├── requirements.txt
@@ -242,7 +298,7 @@ LAG-portfolio/
 └── shared/
     ├── lag-data-utils/                      # Transport clients
     │   └── src/lag_data_utils/clients/
-    │       ├── base.py                       # BaseClient — auth contract only
+    │       ├── base.py                       # BaseClient, AuthenticationError — auth contract + error root
     │       ├── odata.py                      # ODataClient — generic OData v4 CRUD
     │       └── dataverse.py                  # DataverseClient + from_settings() + Protocol
     │
@@ -252,7 +308,9 @@ LAG-portfolio/
             ├── dataverse_settings.py         # DataverseConnectionSettings mixin
             ├── logging.py                    # configure_logging()
             ├── dedupe.py                      # dedupe_last_seen()
-            └── readers/                       # RecordReader, Csv/Json/Parquet
+            ├── readers/                       # RecordReader, Csv/Json/Parquet
+            └── runners/
+                └── base.py                    # BaseSyncRunner — destination-agnostic orchestration
 ```
 
 ## Local environment setup
@@ -305,13 +363,13 @@ application user registered for the target Entra ID app.
 
    ```bash
    cd services/inventory-sync-engine
-   python3 sync_runner.py
+   python3 dataverse_sync_runner.py
    ```
 
    A healthy run logs a single structured line and exits `0`:
 
    ```text
-   2026-07-08T20:40:38-0400 | INFO     | __main__ | Sync complete: 0 created, 100 updated, 0 failed (of 100 records).
+   2026-07-09T10:07:26-0400 | INFO     | lag_service_kit.runners.base | Sync complete: 0 created, 100 updated, 0 failed (of 100 records).
    ```
 
    Missing configuration, a rejected credential, or a per-record HTTP
@@ -322,7 +380,8 @@ application user registered for the target Entra ID app.
 
 This repository holds itself to a strict bar (see `CLAUDE.md`'s
 Architectural Directives): every module under `shared/` and
-`services/inventory-sync-engine/config.py`/`sync_runner.py` passes both
+`services/inventory-sync-engine/` — `config.py`, `dataverse_sync_runner.py`,
+and `runners/` — passes both
 
 ```bash
 mypy --strict --ignore-missing-imports <files>
