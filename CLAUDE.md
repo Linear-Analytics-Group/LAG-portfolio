@@ -159,7 +159,7 @@ later phase until the one above it is checked off.
     `clients/odata.py`, `clients/dataverse.py`, and `sync_runner.py`.
   - Inject strict type annotations across all execution paths in those three
     files.
-- [ ] **Phase 3 — Public-Facing Documentation (`README.md`)** *(current)*
+- [X] **Phase 3 — Public-Facing Documentation (`README.md`)**
   - Draft root `README.md`: business problem solved; architectural rationale
     for the three-tier split — `lag-data-utils` (transport clients),
     `lag-service-kit` (cross-service scaffolding: config, logging, readers,
@@ -181,7 +181,7 @@ later phase until the one above it is checked off.
     `Local CSV (CsvRecordReader) → dedupe_last_seen(key="sku_id") →
     DataverseClient.from_settings() + eager MSAL bearer-token acquisition →
     Idempotent Dataverse OData PATCH (Alternate Key)`.
-- [ ] **Phase 4 — Git Cleanliness & Public Push**
+- [ ] **Phase 4 — Git Cleanliness & Public Push** *(current)*
   - Run `git status` — confirm `.env`, local databases, scratch files, and
     raw config states are excluded from tracking.
   - Commit with conventional syntax:
