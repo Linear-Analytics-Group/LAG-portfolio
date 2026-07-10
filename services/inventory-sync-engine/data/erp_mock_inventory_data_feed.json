@@ -1,0 +1,577 @@
+[
+  {
+    "sku_id":"LIN-EQUIP-1043",
+    "item_name":"Industrial Component v3",
+    "unit_price":1413.43
+  },
+  {
+    "sku_id":"LIN-EQUIP-1005",
+    "item_name":"Industrial Component v3",
+    "unit_price":1372.3
+  },
+  {
+    "sku_id":"LIN-EQUIP-1083",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":7006.05
+  },
+  {
+    "sku_id":"LIN-EQUIP-1085",
+    "item_name":"Industrial Component v1",
+    "unit_price":968.89
+  },
+  {
+    "sku_id":"LIN-EQUIP-1077",
+    "item_name":"Industrial Component v4",
+    "unit_price":1036.18
+  },
+  {
+    "sku_id":"LIN-EQUIP-1012",
+    "item_name":"Industrial Component v1",
+    "unit_price":749.98
+  },
+  {
+    "sku_id":"LIN-EQUIP-1031",
+    "item_name":"Industrial Component v2",
+    "unit_price":2127.52
+  },
+  {
+    "sku_id":"LIN-EQUIP-1001",
+    "item_name":"Industrial Component v4",
+    "unit_price":1589.37
+  },
+  {
+    "sku_id":"LIN-EQUIP-1018",
+    "item_name":"Industrial Component v4",
+    "unit_price":804.66
+  },
+  {
+    "sku_id":"LIN-EQUIP-1019",
+    "item_name":"Industrial Component v2",
+    "unit_price":845.81
+  },
+  {
+    "sku_id":"LIN-EQUIP-1094",
+    "item_name":"Industrial Component v3",
+    "unit_price":958.02
+  },
+  {
+    "sku_id":"LIN-EQUIP-1020",
+    "item_name":"Industrial Component v2",
+    "unit_price":1805.17
+  },
+  {
+    "sku_id":"LIN-EQUIP-1057",
+    "item_name":"Industrial Component v1",
+    "unit_price":1932.77
+  },
+  {
+    "sku_id":"LIN-EQUIP-1061",
+    "item_name":"Industrial Component v4",
+    "unit_price":1725.44
+  },
+  {
+    "sku_id":"LIN-EQUIP-1086",
+    "item_name":"Industrial Component v1",
+    "unit_price":832.5
+  },
+  {
+    "sku_id":"LIN-EQUIP-1040",
+    "item_name":"Industrial Component v5",
+    "unit_price":556.67
+  },
+  {
+    "sku_id":"LIN-EQUIP-1021",
+    "item_name":"Industrial Component v1",
+    "unit_price":1047.92
+  },
+  {
+    "sku_id":"LIN-EQUIP-1008",
+    "item_name":"Industrial Component v3",
+    "unit_price":2167.75
+  },
+  {
+    "sku_id":"LIN-EQUIP-1083",
+    "item_name":"Industrial Component v2",
+    "unit_price":68.63
+  },
+  {
+    "sku_id":"LIN-EQUIP-1025",
+    "item_name":"Industrial Component v5",
+    "unit_price":1302.23
+  },
+  {
+    "sku_id":"LIN-EQUIP-1080",
+    "item_name":"Industrial Component v4",
+    "unit_price":327.66
+  },
+  {
+    "sku_id":"LIN-EQUIP-1004",
+    "item_name":"Industrial Component v4",
+    "unit_price":627.07
+  },
+  {
+    "sku_id":"LIN-EQUIP-1013",
+    "item_name":"Industrial Component v3",
+    "unit_price":106.25
+  },
+  {
+    "sku_id":"LIN-EQUIP-1010",
+    "item_name":"Industrial Component v1",
+    "unit_price":2340.49
+  },
+  {
+    "sku_id":"LIN-EQUIP-1078",
+    "item_name":"Industrial Component v1",
+    "unit_price":868.82
+  },
+  {
+    "sku_id":"LIN-EQUIP-1033",
+    "item_name":"Industrial Component v4",
+    "unit_price":1008.93
+  },
+  {
+    "sku_id":"LIN-EQUIP-1024",
+    "item_name":"Industrial Component v2",
+    "unit_price":1603.39
+  },
+  {
+    "sku_id":"LIN-EQUIP-1092",
+    "item_name":"Industrial Component v3",
+    "unit_price":596.08
+  },
+  {
+    "sku_id":"LIN-EQUIP-1068",
+    "item_name":"Industrial Component v1",
+    "unit_price":977.69
+  },
+  {
+    "sku_id":"LIN-EQUIP-1053",
+    "item_name":"Industrial Component v1",
+    "unit_price":1082.24
+  },
+  {
+    "sku_id":"LIN-EQUIP-1014",
+    "item_name":"Industrial Component v5",
+    "unit_price":987.18
+  },
+  {
+    "sku_id":"LIN-EQUIP-1056",
+    "item_name":"Industrial Component v5",
+    "unit_price":1276.2
+  },
+  {
+    "sku_id":"LIN-EQUIP-1006",
+    "item_name":"Industrial Component v3",
+    "unit_price":1892.26
+  },
+  {
+    "sku_id":"LIN-EQUIP-1029",
+    "item_name":"Industrial Component v2",
+    "unit_price":807.71
+  },
+  {
+    "sku_id":"LIN-EQUIP-1093",
+    "item_name":"Industrial Component v3",
+    "unit_price":1066.14
+  },
+  {
+    "sku_id":"LIN-EQUIP-1030",
+    "item_name":"Industrial Component v5",
+    "unit_price":2297.02
+  },
+  {
+    "sku_id":"LIN-EQUIP-1076",
+    "item_name":"Industrial Component v4",
+    "unit_price":2117.08
+  },
+  {
+    "sku_id":"LIN-EQUIP-1047",
+    "item_name":"Industrial Component v4",
+    "unit_price":365.81
+  },
+  {
+    "sku_id":"LIN-EQUIP-1070",
+    "item_name":"Industrial Component v1",
+    "unit_price":2353.94
+  },
+  {
+    "sku_id":"LIN-EQUIP-1099",
+    "item_name":"Industrial Component v5",
+    "unit_price":1437.58
+  },
+  {
+    "sku_id":"LIN-EQUIP-1066",
+    "item_name":"Industrial Component v1",
+    "unit_price":935.21
+  },
+  {
+    "sku_id":"LIN-EQUIP-1002",
+    "item_name":"Industrial Component v1",
+    "unit_price":1376.3
+  },
+  {
+    "sku_id":"LIN-EQUIP-1091",
+    "item_name":"Industrial Component v1",
+    "unit_price":2132.92
+  },
+  {
+    "sku_id":"LIN-EQUIP-1041",
+    "item_name":"Industrial Component v1",
+    "unit_price":2036.87
+  },
+  {
+    "sku_id":"LIN-EQUIP-1000",
+    "item_name":"Industrial Component v3",
+    "unit_price":432.76
+  },
+  {
+    "sku_id":"LIN-EQUIP-1081",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":5601.16
+  },
+  {
+    "sku_id":"LIN-EQUIP-1053",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":6629.04
+  },
+  {
+    "sku_id":"LIN-EQUIP-1009",
+    "item_name":"Industrial Component v1",
+    "unit_price":1492.0
+  },
+  {
+    "sku_id":"LIN-EQUIP-1022",
+    "item_name":"Industrial Component v3",
+    "unit_price":638.71
+  },
+  {
+    "sku_id":"LIN-EQUIP-1037",
+    "item_name":"Industrial Component v1",
+    "unit_price":974.52
+  },
+  {
+    "sku_id":"LIN-EQUIP-1038",
+    "item_name":"Industrial Component v3",
+    "unit_price":1850.02
+  },
+  {
+    "sku_id":"LIN-EQUIP-1091",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":5952.91
+  },
+  {
+    "sku_id":"LIN-EQUIP-1032",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":5884.83
+  },
+  {
+    "sku_id":"LIN-EQUIP-1071",
+    "item_name":"Industrial Component v4",
+    "unit_price":1369.82
+  },
+  {
+    "sku_id":"LIN-EQUIP-1075",
+    "item_name":"Industrial Component v5",
+    "unit_price":1875.33
+  },
+  {
+    "sku_id":"LIN-EQUIP-1050",
+    "item_name":"Industrial Component v2",
+    "unit_price":785.17
+  },
+  {
+    "sku_id":"LIN-EQUIP-1063",
+    "item_name":"Industrial Component v4",
+    "unit_price":2130.83
+  },
+  {
+    "sku_id":"LIN-EQUIP-1026",
+    "item_name":"Industrial Component v2",
+    "unit_price":327.22
+  },
+  {
+    "sku_id":"LIN-EQUIP-1089",
+    "item_name":"Industrial Component v1",
+    "unit_price":737.06
+  },
+  {
+    "sku_id":"LIN-EQUIP-1071",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":6621.01
+  },
+  {
+    "sku_id":"LIN-EQUIP-1076",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":5785.1
+  },
+  {
+    "sku_id":"LIN-EQUIP-1049",
+    "item_name":"Industrial Component v2",
+    "unit_price":1028.81
+  },
+  {
+    "sku_id":"LIN-EQUIP-1065",
+    "item_name":"Industrial Component v4",
+    "unit_price":2413.22
+  },
+  {
+    "sku_id":"LIN-EQUIP-1045",
+    "item_name":"Industrial Component v1",
+    "unit_price":2433.39
+  },
+  {
+    "sku_id":"LIN-EQUIP-1017",
+    "item_name":"Industrial Component v2",
+    "unit_price":2376.77
+  },
+  {
+    "sku_id":"LIN-EQUIP-1090",
+    "item_name":"Industrial Component v2",
+    "unit_price":1952.06
+  },
+  {
+    "sku_id":"LIN-EQUIP-1088",
+    "item_name":"Industrial Component v3",
+    "unit_price":2158.65
+  },
+  {
+    "sku_id":"LIN-EQUIP-1073",
+    "item_name":"Industrial Component v5",
+    "unit_price":2263.87
+  },
+  {
+    "sku_id":"LIN-EQUIP-1060",
+    "item_name":"Industrial Component v1",
+    "unit_price":1527.01
+  },
+  {
+    "sku_id":"LIN-EQUIP-1011",
+    "item_name":"Industrial Component v5",
+    "unit_price":1622.94
+  },
+  {
+    "sku_id":"LIN-EQUIP-1015",
+    "item_name":"Industrial Component v1",
+    "unit_price":22.01
+  },
+  {
+    "sku_id":"LIN-EQUIP-1058",
+    "item_name":"Industrial Component v5",
+    "unit_price":396.81
+  },
+  {
+    "sku_id":"LIN-EQUIP-1082",
+    "item_name":"Industrial Component v3",
+    "unit_price":238.76
+  },
+  {
+    "sku_id":"LIN-EQUIP-1048",
+    "item_name":"Industrial Component v2",
+    "unit_price":1796.46
+  },
+  {
+    "sku_id":"LIN-EQUIP-1098",
+    "item_name":"Industrial Component v2",
+    "unit_price":1631.68
+  },
+  {
+    "sku_id":"LIN-EQUIP-1095",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":6282.09
+  },
+  {
+    "sku_id":"LIN-EQUIP-1039",
+    "item_name":"Industrial Component v2",
+    "unit_price":558.39
+  },
+  {
+    "sku_id":"LIN-EQUIP-1044",
+    "item_name":"Industrial Component v5",
+    "unit_price":1992.43
+  },
+  {
+    "sku_id":"LIN-EQUIP-1003",
+    "item_name":"Industrial Component v1",
+    "unit_price":30.93
+  },
+  {
+    "sku_id":"LIN-EQUIP-1084",
+    "item_name":"Industrial Component v2",
+    "unit_price":601.6
+  },
+  {
+    "sku_id":"LIN-EQUIP-1059",
+    "item_name":"Industrial Component v2",
+    "unit_price":682.04
+  },
+  {
+    "sku_id":"LIN-EQUIP-1053",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":5590.88
+  },
+  {
+    "sku_id":"LIN-EQUIP-1051",
+    "item_name":"Industrial Component v3",
+    "unit_price":1688.77
+  },
+  {
+    "sku_id":"LIN-EQUIP-1036",
+    "item_name":"Industrial Component v1",
+    "unit_price":1331.84
+  },
+  {
+    "sku_id":"LIN-EQUIP-1035",
+    "item_name":"Industrial Component v4",
+    "unit_price":421.29
+  },
+  {
+    "sku_id":"LIN-EQUIP-1069",
+    "item_name":"Industrial Component v2",
+    "unit_price":432.97
+  },
+  {
+    "sku_id":"LIN-EQUIP-1052",
+    "item_name":"Industrial Component v1",
+    "unit_price":306.09
+  },
+  {
+    "sku_id":"LIN-EQUIP-1027",
+    "item_name":"Industrial Component v4",
+    "unit_price":1912.88
+  },
+  {
+    "sku_id":"LIN-EQUIP-1032",
+    "item_name":"Industrial Component v3",
+    "unit_price":1593.61
+  },
+  {
+    "sku_id":"LIN-EQUIP-1081",
+    "item_name":"Industrial Component v5",
+    "unit_price":2007.82
+  },
+  {
+    "sku_id":"LIN-EQUIP-1016",
+    "item_name":"Industrial Component v1",
+    "unit_price":202.85
+  },
+  {
+    "sku_id":"LIN-EQUIP-1067",
+    "item_name":"Industrial Component v4",
+    "unit_price":2055.64
+  },
+  {
+    "sku_id":"LIN-EQUIP-1007",
+    "item_name":"Industrial Component v5",
+    "unit_price":382.13
+  },
+  {
+    "sku_id":"LIN-EQUIP-1009",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":6216.4
+  },
+  {
+    "sku_id":"LIN-EQUIP-1069",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":5909.39
+  },
+  {
+    "sku_id":"LIN-EQUIP-1087",
+    "item_name":"Industrial Component v4",
+    "unit_price":447.35
+  },
+  {
+    "sku_id":"LIN-EQUIP-1096",
+    "item_name":"Industrial Component v1",
+    "unit_price":492.88
+  },
+  {
+    "sku_id":"LIN-EQUIP-1054",
+    "item_name":"Industrial Component v1",
+    "unit_price":2389.15
+  },
+  {
+    "sku_id":"LIN-EQUIP-1062",
+    "item_name":"Industrial Component v5",
+    "unit_price":363.1
+  },
+  {
+    "sku_id":"LIN-EQUIP-1046",
+    "item_name":"Industrial Component v5",
+    "unit_price":2415.17
+  },
+  {
+    "sku_id":"LIN-EQUIP-1064",
+    "item_name":"Industrial Component v5",
+    "unit_price":1180.22
+  },
+  {
+    "sku_id":"LIN-EQUIP-1091",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":5933.84
+  },
+  {
+    "sku_id":"LIN-EQUIP-1028",
+    "item_name":"Industrial Component v5",
+    "unit_price":502.12
+  },
+  {
+    "sku_id":"LIN-EQUIP-1042",
+    "item_name":"Industrial Component v5",
+    "unit_price":799.35
+  },
+  {
+    "sku_id":"LIN-EQUIP-1074",
+    "item_name":"Industrial Component v1",
+    "unit_price":875.48
+  },
+  {
+    "sku_id":"LIN-EQUIP-1097",
+    "item_name":"Industrial Component v2",
+    "unit_price":413.52
+  },
+  {
+    "sku_id":"LIN-EQUIP-1037",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":7112.07
+  },
+  {
+    "sku_id":"LIN-EQUIP-1079",
+    "item_name":"Industrial Component v2",
+    "unit_price":127.9
+  },
+  {
+    "sku_id":"LIN-EQUIP-1072",
+    "item_name":"Industrial Component v1",
+    "unit_price":1942.33
+  },
+  {
+    "sku_id":"LIN-EQUIP-1030",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":6182.72
+  },
+  {
+    "sku_id":"LIN-EQUIP-1095",
+    "item_name":"Industrial Component v4",
+    "unit_price":1286.95
+  },
+  {
+    "sku_id":"LIN-EQUIP-1089",
+    "item_name":"[UPDATED] Modified Variant Data",
+    "unit_price":5825.52
+  },
+  {
+    "sku_id":"LIN-EQUIP-1023",
+    "item_name":"Industrial Component v1",
+    "unit_price":1512.2
+  },
+  {
+    "sku_id":"LIN-EQUIP-1055",
+    "item_name":"Industrial Component v3",
+    "unit_price":2439.32
+  },
+  {
+    "sku_id":"LIN-EQUIP-1034",
+    "item_name":"Industrial Component v5",
+    "unit_price":84.94
+  }
+]

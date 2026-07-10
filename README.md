@@ -39,6 +39,7 @@ graph TD
         IDM["runners/base.py<br/>InventoryDomainMixin"]
         BODR["runners/odata.py<br/>BaseODataInventorySyncRunner"]
         CSVSRC["sources/csv.py<br/>CsvInventorySource"]
+        JSONSRC["sources/json.py<br/>JsonInventorySource"]
         SRC["sources/base.py<br/>InventorySource protocol"]
         CFG["config.py<br/>InventorySyncSettings"]
     end
@@ -64,12 +65,14 @@ graph TD
     DISR -->|"inherits (protocol base)"| BODR
     BODR -->|inherits| BSR
     CSVSRC -.->|satisfies| SRC
+    JSONSRC -.->|satisfies| SRC
     DISR -.->|"composes a source at construction time<br/>(injected, not inherited)"| SRC
     CFG -->|inherits| BSS
     CFG -->|inherits| DCS
     DISR --> CFG
     DISR --> DV
     CSVSRC --> RDR
+    JSONSRC --> RDR
     IDM --> DEDUPE
     BSR --> LOG
     DV --> ODATA --> BASE
@@ -80,7 +83,7 @@ graph TD
 |---|---|---|---|
 | Transport | `shared/lag-data-utils` | HTTP/OData mechanics, MSAL auth, Dataverse-specific headers, the `AuthenticationError` hierarchy | Environment reads, a config framework, business logic |
 | Scaffolding | `shared/lag-service-kit` | Settings base classes, structured logging, input-format readers, generic dedup, the source- and destination-agnostic `BaseSyncRunner` orchestration algorithm (generic over the transport client type) | Dataverse-specific, inventory-specific, or source-format-specific knowledge |
-| Orchestration | `services/inventory-sync-engine` | Three independent things that combine, never duplicate: the domain mixin `InventoryDomainMixin` (dedup, source binding), one write-protocol base per wire protocol (`BaseODataInventorySyncRunner` today), and one destination leaf class per target system (`DataverseInventorySyncRunner`, combining exactly one of each) — plus, on a wholly separate axis, one `InventorySource` per feed format (`CsvInventorySource` today), composed into a runner by the caller | Anything reusable by a service that isn't this one |
+| Orchestration | `services/inventory-sync-engine` | Three independent things that combine, never duplicate: the domain mixin `InventoryDomainMixin` (dedup, source binding), one write-protocol base per wire protocol (`BaseODataInventorySyncRunner` today), and one destination leaf class per target system (`DataverseInventorySyncRunner`, combining exactly one of each) — plus, on a wholly separate axis, one `InventorySource` per feed format (`CsvInventorySource` and `JsonInventorySource` today), composed into a runner by the caller | Anything reusable by a service that isn't this one |
 
 Three axes vary independently here, and each stays a single point of
 definition:
@@ -136,7 +139,8 @@ Concretely:
     `sources.InventorySource` protocol (`sources/base.py`). A destination
     inheriting from a source class would fix that destination to one feed
     format forever; composition lets the same `DataverseInventorySyncRunner`
-    read CSV today and JSON tomorrow with no new class.
+    read CSV or JSON — both ship today, see `sources/csv.py` and
+    `sources/json.py` — with no new class.
     - It **does** inherit two independent bases, combined via multiple
     inheritance: `InventoryDomainMixin` (`runners/base.py` — dedup, source
     binding) and `BaseODataInventorySyncRunner` (`runners/odata.py` — the
@@ -232,11 +236,13 @@ protocol — SOAP, a bulk-upload REST API — means writing a sibling
 protocol base (e.g. `runners/soap.py:BaseSoapInventorySyncRunner(BaseSyncRunner[SoapClient])`)
 with its own hooks and write loop; its leaf class still inherits
 `InventoryDomainMixin` unchanged, so dedup and source binding are never
-reimplemented for a new protocol. Adding a second source format — a JSON
-feed, a Parquet drop — means writing a sibling source class (e.g.
-`sources/json.py:JsonInventorySource`) that implements only
-`read_records()`; any existing destination leaf can be pointed at it
-immediately, by construction, with no new subclass. Neither
+reimplemented for a new protocol. A second source format is a sibling
+source class implementing only `read_records()` — `sources/json.py:JsonInventorySource`
+ships today alongside `CsvInventorySource`; a Parquet drop would be the
+same shape again. `DataverseInventorySyncRunner(source=JsonInventorySource())`
+reads the JSON mock feed and produces byte-for-byte identical
+deduplicated records to `DataverseInventorySyncRunner(source=CsvInventorySource())`
+against the same mock dataset, with no new subclass. Neither
 `BaseSyncRunner`, `InventoryDomainMixin`, nor any protocol base changes
 to support a new instance of any axis, and the three axes never multiply
 against each other.
@@ -309,9 +315,13 @@ class InventorySource(Protocol):
 `lag_service_kit.readers` ships three `RecordReader` implementations —
 `CsvRecordReader`, `JsonRecordReader` (expects `orient="records"` JSON),
 and `ParquetRecordReader` — generic across any service. The inventory
-service's `sources/csv.py:CsvInventorySource` wraps `CsvRecordReader`
-with the one thing it adds: knowing *which* file, the ERP mock feed's
-path. `CsvInventorySource.read_records()` satisfies `InventorySource`.
+service ships two sources today, each wrapping one reader with the one
+thing it adds — knowing *which* file: `sources/csv.py:CsvInventorySource`
+wraps `CsvRecordReader` over `data/erp_mock_inventory_data_feed.csv`, and
+`sources/json.py:JsonInventorySource` wraps `JsonRecordReader` over
+`data/erp_mock_inventory_data_feed.json` — the same mock inventory
+dataset, shipped in both formats. Both `read_records()` implementations
+satisfy `InventorySource` identically.
 
 Crucially, `InventoryDomainMixin` depends on `InventorySource`, not on
 any concrete source class, and receives one through its constructor
@@ -326,13 +336,15 @@ class InventoryDomainMixin:
         return dedupe_last_seen(self.source.read_records(), key=self.dedupe_key)
 ```
 
-Supporting JSON or Parquet means adding a sibling module —
-`sources/json.py:JsonInventorySource`, `sources/parquet.py:ParquetInventorySource`
-— implementing only `read_records()` with the matching `RecordReader`.
-No runner changes, because no runner inherits from a source: a
-`DataverseInventorySyncRunner(source=JsonInventorySource(...))` reads
-JSON without a new class. `InventoryDomainMixin.load_records()` (dedup)
-and `BaseODataInventorySyncRunner.sync_records()` (the upsert loop) never
+Supporting a further format (Parquet, a REST feed) means adding one more
+sibling module implementing only `read_records()` with the matching
+`RecordReader`. No runner changes, because no runner inherits from a
+source: `DataverseInventorySyncRunner(source=JsonInventorySource())`
+reads JSON with the exact same class used for CSV — proven directly,
+not just claimed: run against the two mock feeds shipped in this repo,
+both sources produce identical deduplicated records.
+`InventoryDomainMixin.load_records()` (dedup) and
+`BaseODataInventorySyncRunner.sync_records()` (the upsert loop) never
 change either way — both only ever depend on the resulting `DataFrame`,
 never on what produced it.
 
@@ -429,13 +441,14 @@ LAG-portfolio/
 │       │   ├── odata.py                      # BaseODataInventorySyncRunner — the OData v4 upsert loop
 │       │   └── dataverse.py                  # DataverseInventorySyncRunner — the only Dataverse-specific code
 │       ├── sources/                          # Source axis — composed into a runner, never inherited
-│       │   ├── __init__.py                   # Exports InventorySource, CsvInventorySource
+│       │   ├── __init__.py                   # Exports InventorySource, CsvInventorySource, JsonInventorySource
 │       │   ├── base.py                       # InventorySource protocol
-│       │   └── csv.py                        # CsvInventorySource — the only CSV-specific code
-│       ├── generate_mock_data.py            # Mock ERP feed generator (dev/test only)
-│       ├── test_connection.py               # Standalone MSAL/Dataverse smoke test
+│       │   ├── csv.py                        # CsvInventorySource — the only CSV-specific code
+│       │   └── json.py                       # JsonInventorySource — the only JSON-specific code
 │       ├── requirements.txt
-│       └── data/erp_mock_inventory_data_feed.csv
+│       └── data/
+│           ├── erp_mock_inventory_data_feed.csv
+│           └── erp_mock_inventory_data_feed.json
 │
 └── shared/
     ├── lag-data-utils/                      # Transport clients

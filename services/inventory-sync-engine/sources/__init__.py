@@ -8,5 +8,6 @@ adding a destination never touches a source.
 
 from .base import InventorySource
 from .csv import CsvInventorySource
+from .json import JsonInventorySource
 
-__all__ = ["InventorySource", "CsvInventorySource"]
+__all__ = ["InventorySource", "CsvInventorySource", "JsonInventorySource"]

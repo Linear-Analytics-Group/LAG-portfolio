@@ -24,10 +24,10 @@ class CsvInventorySource:
     future ``SapInventorySyncRunner``, ...) is paired with this source by
     passing an instance of it to the runner's constructor — the runner
     never inherits from or otherwise depends on this class directly, so
-    the same destination logic works unchanged against any source. A
-    future source format (JSON, Parquet, a REST feed) is added as a
-    sibling module — ``sources/json.py``, ``sources/parquet.py`` —
-    implementing only :meth:`read_records`.
+    the same destination logic works unchanged whether it is paired with
+    this source or ``sources.JsonInventorySource``. A future source
+    format (Parquet, a REST feed) is added the same way, as a sibling
+    module implementing only :meth:`read_records`.
     """
 
     def __init__(self, csv_path: Path = CSV_PATH) -> None:
