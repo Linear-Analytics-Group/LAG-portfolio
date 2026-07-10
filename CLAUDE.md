@@ -33,9 +33,10 @@ LAG-portfolio/
 │       │   ├── odata.py                  # BaseODataInventorySyncRunner[ODataClient] — the upsert loop
 │       │   └── dataverse.py              # DataverseInventorySyncRunner — the only Dataverse-specific code
 │       └── sources/                      # Source-format axis — composed into a runner, never inherited
-│           ├── __init__.py               # Exports InventorySource, CsvInventorySource
+│           ├── __init__.py               # Exports InventorySource, CsvInventorySource, JsonInventorySource
 │           ├── base.py                   # InventorySource protocol
-│           └── csv.py                    # CsvInventorySource — the only CSV-specific code
+│           ├── csv.py                    # CsvInventorySource — the only CSV-specific code
+│           └── json.py                   # JsonInventorySource — the only JSON-specific code
 │
 └── shared/
     ├── lag-data-utils/                   # Transport client layer [STABILIZED]
@@ -180,10 +181,12 @@ in this repo. They are not advisory.
      (`DataverseInventorySyncRunner(source=CsvInventorySource())` in
      `dataverse_sync_runner.py`). A destination class must never inherit
      from a source-specific class — that would fix it to one feed format
-     forever. A new source format (`sources/json.py:JsonInventorySource`,
-     `sources/parquet.py:ParquetInventorySource`) is a sibling class
-     implementing only `read_records()`; every existing destination leaf
-     can be pointed at it immediately, with no new subclass.
+     forever. `sources/csv.py:CsvInventorySource` and
+     `sources/json.py:JsonInventorySource` ship today as siblings, each
+     implementing only `read_records()`; a future format (e.g.
+     `sources/parquet.py:ParquetInventorySource`) is added the same way.
+     Every existing destination leaf can be pointed at any of them
+     immediately, with no new subclass.
 
    Default to this three-part shape when adding a new destination, wire
    protocol, source format, or service — modularity and scalability take
