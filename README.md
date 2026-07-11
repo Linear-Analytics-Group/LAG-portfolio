@@ -193,20 +193,19 @@ for the parts every run requires regardless of axis.
   narrowing it independently.
 - `services/inventory-sync-engine/runners/base.py:InventoryDomainMixin`
   — the inventory-domain layer. Knows what an inventory record is
-  (`sku_id`, `item_name`, `unit_price`) and how to dedupe it. Knows
-  nothing about what source feed produced a record, which wire protocol
-  writes it, or which destination it's going to — its constructor takes
-  a `source: InventorySource` collaborator, and `load_records()` calls
-  `self.source.read_records()`. It does not inherit `BaseSyncRunner` at
-  all: it commits to no `ClientT`, so it is a bare mixin, combined into a
-  leaf class via multiple inheritance alongside whichever protocol base
-  that leaf needs.
+  (e.g., `sku_id`, `item_name`, `unit_price`) and how to dedupe it. Knows
+  nothing about the source feed, wire protocol, or destination. 
+  Its constructor takes a `source: InventorySource` collaborator, 
+  while `load_records()` calls `self.source.read_records()`. 
+  It does not inherit `BaseSyncRunner` and commits to no `ClientT`. 
+  It is a bare mixin combined into a leaf class via multiple inheritance 
+  alongside the leaf's required protocol.
 - `services/inventory-sync-engine/runners/odata.py:BaseODataInventorySyncRunner`
   — the write-protocol layer, `BaseSyncRunner[ODataClient]`. Knows how to
   drive the generic `upsert_record` loop against *any* OData v4 client,
   given `entity_set`, `alternate_key_field`, and `build_payload()` from
   a destination leaf. Knows nothing about dedup or source feeds — those
-  come from whichever domain mixin the leaf also inherits. `dedupe_key`
+  come from whichever domain mixin the leaf inherits. `dedupe_key`
   is declared here (for the one line in `sync_records()` that needs a
   record's business-key column) but never assigned here — a domain mixin
   is the only place that value is set, so it is never duplicated.
@@ -231,12 +230,12 @@ Adding a second destination that also speaks OData v4 — SAP S/4HANA
 Cloud, SharePoint Online — means writing a sibling leaf class (e.g.
 `runners/sap.py`) combining the same two bases,
 `class SapInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncRunner)`,
-and supplying only its own settings, client, entity set, alternate key,
-and payload mapping; its entrypoint composes it with whichever source it
+and supplying its own settings, client, entity set, alternate key,
+and payload mapping. Its entrypoint composes it with whichever source it
 needs. Adding a destination that speaks a genuinely different wire
-protocol — SOAP, a bulk-upload REST API — means writing a sibling
+protocol (e.g., SOAP, a bulk-upload REST API, etc.) means writing a sibling
 protocol base (e.g. `runners/soap.py:BaseSoapInventorySyncRunner(BaseSyncRunner[SoapClient])`)
-with its own hooks and write loop; its leaf class still inherits
+with its own hooks and write loop. Its leaf class still inherits
 `InventoryDomainMixin` unchanged, so dedup and source binding are never
 reimplemented for a new protocol. A second source format is a sibling
 source class implementing only `read_records()` — `sources/json.py:JsonInventorySource`
@@ -247,7 +246,7 @@ deduplicated records to `DataverseInventorySyncRunner(source=CsvInventorySource(
 against the same mock dataset, with no new subclass. Neither
 `BaseSyncRunner`, `InventoryDomainMixin`, nor any protocol base changes
 to support a new instance of any axis, and the three axes never multiply
-against each other.
+against each other, thus preventing combinatorial explosion.
 
 ## Key design patterns
 
@@ -325,7 +324,7 @@ wraps `CsvRecordReader` over `data/erp_mock_inventory_data_feed.csv`, and
 dataset, shipped in both formats. Both `read_records()` implementations
 satisfy `InventorySource` identically.
 
-Crucially, `InventoryDomainMixin` depends on `InventorySource`, not on
+Crucially, `InventoryDomainMixin` depends on `InventorySource`, not 
 any concrete source class, and receives one through its constructor
 rather than through inheritance:
 
@@ -343,12 +342,12 @@ sibling module implementing only `read_records()` with the matching
 `RecordReader`. No runner changes, because no runner inherits from a
 source: `DataverseInventorySyncRunner(source=JsonInventorySource())`
 reads JSON with the exact same class used for CSV — proven directly,
-not just claimed: run against the two mock feeds shipped in this repo,
-both sources produce identical deduplicated records.
+not just claimed: run against the two mock feeds, both sources produce \
+identical deduplicated records.
 `InventoryDomainMixin.load_records()` (dedup) and
 `BaseODataInventorySyncRunner.sync_records()` (the upsert loop) never
 change either way — both only ever depend on the resulting `DataFrame`,
-never on what produced it.
+never the source that produced it.
 
 ## Execution flow
 
@@ -539,23 +538,15 @@ application user registered for the target Entra ID app.
 This repository holds itself to a strict bar (see `CLAUDE.md`'s
 Architectural Directives): every module under `shared/` and
 `services/inventory-sync-engine/` — `config.py`, `dataverse_sync_runner.py`,
-`runners/`, and `sources/` — passes both
+`runners/`, and `sources/` — passes both mypy and pydocstyle scans with zero
+findings.
 
 ```bash
 mypy --strict --ignore-missing-imports <files>
 pydocstyle --convention=numpy <files>
 ```
 
-with zero findings. Both `lag-data-utils` and `lag-service-kit` ship a
+Both `lag-data-utils` and `lag-service-kit` ship a
 `py.typed` marker (PEP 561) so a consumer running `mypy --strict` against
-just a service file — not the whole monorepo at once — still gets full
-type information instead of silently degrading to `Any`.
-
-## Project status
-
-Tracked against a phased public-release roadmap in `CLAUDE.md`. As of this
-document: dynamic execution and schema verification (Phase 1), the
-production refactor to Pydantic settings, structured logging, NumPy
-docstrings, and strict typing (Phase 2), and this document itself
-(Phase 3 — public-facing documentation) are complete. Phase 4 — git
-cleanliness and the public push to GitHub — is in progress.
+just a service file still gets full type information instead 
+of silently degrading to `Any`.
