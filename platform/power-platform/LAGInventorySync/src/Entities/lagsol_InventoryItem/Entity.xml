@@ -252,7 +252,7 @@
           <Type>nvarchar</Type>
           <Name>lagsol_skuid</Name>
           <LogicalName>lagsol_skuid</LogicalName>
-          <RequiredLevel>none</RequiredLevel>
+          <RequiredLevel>required</RequiredLevel>
           <DisplayMask>ValidForForm|ValidForGrid</DisplayMask>
           <ImeMode>auto</ImeMode>
           <ValidForUpdateApi>1</ValidForUpdateApi>
