@@ -1,4 +1,4 @@
-# LAG Dataverse OData Sync Engine
+# Linear Analytics Group - Dataverse OData Sync Engine
 
 A Python service that migrates ERP inventory data into Microsoft Dataverse via 
 the OData Web API, utilizing an extensible, multi-layer architecture designed 
@@ -98,7 +98,7 @@ definition:
 
 A runner is *given* a source object; it never subclasses one. A
 destination leaf *combines with* a protocol base via multiple
-inheritance, rather than reimplementing the write loop, because the
+inheritance, rather than reimplementing the write loop. The
 write loop and the domain/dedup logic are both class-level, structural
 concerns fixed for the lifetime of that leaf class — unlike the source,
 which is a per-run operational choice.
@@ -108,14 +108,16 @@ which is a per-run operational choice.
 A typical split calls for "library vs. application" — transport code in
 `lag-data-utils`, everything else in the service. That approach fails to
 support additional services (e.g., config loading, logging setup, and 
-"read this file format into a DataFrame").  Each new service would result in 
-duplicated code or a bloated transport layer, compromising the clean boundaries 
-of `lag-data-utils`, therefore preventing delivery of a clean and maintainable 
+the source file DataFrame conversion used to support record deduplication). 
+Under a traditional split, each new service would result in duplicated code 
+or a bloated transport layer- compromising the clean boundaries of 
+`lag-data-utils` and preventing delivery of a clean and maintainable 
 transport layer.
 
 `lag-service-kit` exists to hold code and logic that is reusable across
-*any* future service independent of any transport concern. This approach 
-prevents the transport layer dependency on any specific configuration framework. 
+*any* future service, independent of any transport concern. This approach 
+prevents transport layer dependency on any specific configuration framework. 
+
 Concretely:
 
 - `lag-data-utils` has zero dependency on Pydantic or any settings library.
@@ -133,9 +135,8 @@ Concretely:
     only methods specific to Microsoft Dataverse integrations: `entity_set`,
     `alternate_key_field`, `load_settings()`, `build_client()`, and
     `build_payload()`.
-    - It does **not** inherit its source feed. Which feed format a run reads
-    is composed in at construction time — `DataverseInventorySyncRunner(source=CsvInventorySource())`
-    in `dataverse_sync_runner.py` — via any object satisfying the
+    - It does **not** inherit its source feed. The feed format a run reads
+    is set at construction time (e.g. `DataverseInventorySyncRunner(source=CsvInventorySource())`) in `dataverse_sync_runner.py` — via any object satisfying the
     `sources.InventorySource` protocol (`sources/base.py`). A destination
     inheriting from a source class would fix that destination to one feed
     format forever; composition lets the same `DataverseInventorySyncRunner`
@@ -154,7 +155,7 @@ Concretely:
 ### Layering Patterns
 
 The transport hierarchy (`BaseClient` → `ODataClient` → `DataverseClient`)
-goes beyond simply being reserved for connectors — services like the sync runner 
+goes beyond simply being reserved for connectors. Services like the sync runner 
 are built the same way, for the axis that genuinely is a hierarchy.
   - A base class owns core implementation pieces that are vital to any
   integration and rarely vary.
@@ -176,14 +177,15 @@ the source axis.
 The Service Kit combines three techniques, one per axis of variation:
 dependency injection for the source (an operational, per-run choice),
 mixin composition for domain logic and write protocol (two class-level
-concerns that must each stay defined exactly once), and template method
-for the parts of the algorithm every run shares regardless of any axis.
+concerns that must each stay defined exactly once), and template methods
+for the parts every run requires regardless of axis.
 
 - `lag_service_kit.runners.base.BaseSyncRunner` — the outermost, fully
-  generic layer. Knows the *shape* of a sync run (load settings → configure
-  logging → authenticate → read records → write records → report results)
-  but makes no direct implementation or reference to the shape or type of the 
-  source or destination. It lives in the kit in lieu of any particular service
+  generic layer. Knows the *shape* of a sync run (core execution flow: 
+  load settings → configure logging → authenticate → read records → 
+  write records → report results) but makes no direct implementation or 
+  reference to the shape or type of the source or destination. 
+  It lives in the kit in lieu of any particular service
   to support other service implementations that require this same shape.
   It is generic over `ClientT` (bound to `lag_data_utils.clients.base.BaseClient`),
   so every subclass in a given hierarchy agrees on one concrete client
