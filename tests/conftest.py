@@ -12,6 +12,8 @@ from typing import Callable, List
 import pandas as pd
 import pytest
 from lag_data_utils.clients.dataverse import DataverseClient
+from runners.dataverse import DataverseInventorySyncRunner
+from sources import CsvInventorySource, JsonInventorySource
 
 #: Every environment variable a Dataverse-backed service's settings read.
 DATAVERSE_ENV_VARS: List[str] = [
@@ -52,7 +54,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
 
 @pytest.fixture
 def dataverse_client(monkeypatch: pytest.MonkeyPatch) -> DataverseClient:
-    """A ``DataverseClient`` wired to a fake environment, with MSAL stubbed out.
+    """Build a ``DataverseClient`` wired to a fake environment, with MSAL stubbed out.
 
     ``msal.ConfidentialClientApplication.__init__`` performs a real network
     call (OIDC tenant discovery) before any token is ever requested, so
@@ -97,7 +99,7 @@ def dataverse_client(monkeypatch: pytest.MonkeyPatch) -> DataverseClient:
 
 @pytest.fixture
 def raw_inventory_records() -> pd.DataFrame:
-    """A small, deliberately-duplicated raw inventory feed for dedup/sync tests.
+    """Build a small, deliberately-duplicated raw inventory feed for dedup/sync tests.
 
     Returns
     -------
@@ -118,8 +120,8 @@ def raw_inventory_records() -> pd.DataFrame:
 
 
 @pytest.fixture
-def csv_source(tmp_path: Path, raw_inventory_records: pd.DataFrame):  # type: ignore[no-untyped-def]
-    """A ``CsvInventorySource`` backed by a temp file of ``raw_inventory_records``.
+def csv_source(tmp_path: Path, raw_inventory_records: pd.DataFrame) -> CsvInventorySource:
+    """Build a ``CsvInventorySource`` backed by a temp file of ``raw_inventory_records``.
 
     Parameters
     ----------
@@ -133,16 +135,14 @@ def csv_source(tmp_path: Path, raw_inventory_records: pd.DataFrame):  # type: ig
     CsvInventorySource
         A source reading the temp CSV file, not the shipped mock feed.
     """
-    from sources import CsvInventorySource
-
     csv_path = tmp_path / "mock_feed.csv"
     raw_inventory_records.to_csv(csv_path, index=False)
     return CsvInventorySource(csv_path=csv_path)
 
 
 @pytest.fixture
-def json_source(tmp_path: Path, raw_inventory_records: pd.DataFrame):  # type: ignore[no-untyped-def]
-    """A ``JsonInventorySource`` backed by a temp file of ``raw_inventory_records``.
+def json_source(tmp_path: Path, raw_inventory_records: pd.DataFrame) -> JsonInventorySource:
+    """Build a ``JsonInventorySource`` backed by a temp file of ``raw_inventory_records``.
 
     Parameters
     ----------
@@ -156,8 +156,6 @@ def json_source(tmp_path: Path, raw_inventory_records: pd.DataFrame):  # type: i
     JsonInventorySource
         A source reading the temp JSON file, not the shipped mock feed.
     """
-    from sources import JsonInventorySource
-
     json_path = tmp_path / "mock_feed.json"
     raw_inventory_records.to_json(json_path, orient="records")
     return JsonInventorySource(json_path=json_path)
@@ -166,8 +164,8 @@ def json_source(tmp_path: Path, raw_inventory_records: pd.DataFrame):  # type: i
 @pytest.fixture
 def dataverse_runner_factory(
     monkeypatch: pytest.MonkeyPatch, dataverse_client: DataverseClient
-) -> Callable[..., object]:
-    """A factory building a ``DataverseInventorySyncRunner`` wired to a fake environment.
+) -> Callable[..., DataverseInventorySyncRunner]:
+    """Return a factory building a ``DataverseInventorySyncRunner`` wired to a fake environment.
 
     Bypasses real settings loading and real client construction entirely
     (``load_settings``/``build_client`` are monkeypatched on the instance),
@@ -184,13 +182,11 @@ def dataverse_runner_factory(
 
     Returns
     -------
-    Callable[..., object]
+    Callable[..., DataverseInventorySyncRunner]
         A callable taking a ``source`` (satisfying ``InventorySource``)
         and returning a ready-to-``.run()`` ``DataverseInventorySyncRunner``.
     """
     from types import SimpleNamespace
-
-    from runners.dataverse import DataverseInventorySyncRunner
 
     def _build(source: object) -> DataverseInventorySyncRunner:
         runner = DataverseInventorySyncRunner(source=source)  # type: ignore[arg-type]

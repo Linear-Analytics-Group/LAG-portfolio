@@ -19,7 +19,7 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.integration
-def test_settings_compose_dataverse_and_service_fields(monkeypatch):
+def test_settings_compose_dataverse_and_service_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     """InventorySyncSettings exposes both Dataverse connection fields and log_level."""
     _set_required_env(monkeypatch)
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
@@ -34,7 +34,7 @@ def test_settings_compose_dataverse_and_service_fields(monkeypatch):
 
 
 @pytest.mark.integration
-def test_log_level_defaults_to_info_when_unset(monkeypatch):
+def test_log_level_defaults_to_info_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     """log_level defaults to INFO when LOG_LEVEL is not set, without affecting required fields."""
     _set_required_env(monkeypatch)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
@@ -45,7 +45,7 @@ def test_log_level_defaults_to_info_when_unset(monkeypatch):
 
 
 @pytest.mark.integration
-def test_settings_satisfy_lag_data_utils_protocol_structurally(monkeypatch):
+def test_settings_satisfy_lag_data_utils_protocol_structurally(monkeypatch: pytest.MonkeyPatch) -> None:
     """An InventorySyncSettings instance satisfies lag_data_utils's Protocol via structural typing.
 
     lag_data_utils never imports lag_service_kit or Pydantic — this

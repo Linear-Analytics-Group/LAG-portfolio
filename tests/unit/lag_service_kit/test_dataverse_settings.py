@@ -4,8 +4,10 @@ import pytest
 from lag_service_kit.dataverse_settings import DataverseConnectionSettings
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.unit
 
-def test_valid_values_are_accepted(clean_env):
+
+def test_valid_values_are_accepted(clean_env: pytest.MonkeyPatch) -> None:
     """All four required fields, when provided, are accepted as-is (aside from normalization)."""
     settings = DataverseConnectionSettings(
         azure_tenant_id="tenant-id",
@@ -17,7 +19,7 @@ def test_valid_values_are_accepted(clean_env):
     assert settings.dataverse_url == "https://org.crm.dynamics.com"
 
 
-def test_missing_required_fields_raise_validation_error(clean_env):
+def test_missing_required_fields_raise_validation_error(clean_env: pytest.MonkeyPatch) -> None:
     """Every one of the four fields is required — omitting any raises ValidationError."""
     with pytest.raises(ValidationError) as exc_info:
         DataverseConnectionSettings()  # type: ignore[call-arg]
@@ -31,7 +33,7 @@ def test_missing_required_fields_raise_validation_error(clean_env):
     }
 
 
-def test_empty_string_fields_raise_validation_error(clean_env):
+def test_empty_string_fields_raise_validation_error(clean_env: pytest.MonkeyPatch) -> None:
     """An empty string does not satisfy min_length=1 — it's treated the same as missing."""
     with pytest.raises(ValidationError):
         DataverseConnectionSettings(
@@ -42,7 +44,7 @@ def test_empty_string_fields_raise_validation_error(clean_env):
         )
 
 
-def test_whitespace_is_stripped_from_all_four_fields(clean_env):
+def test_whitespace_is_stripped_from_all_four_fields(clean_env: pytest.MonkeyPatch) -> None:
     """Leading/trailing whitespace from a raw environment value is stripped before validation."""
     settings = DataverseConnectionSettings(
         azure_tenant_id="  tenant-id  ",
@@ -56,7 +58,7 @@ def test_whitespace_is_stripped_from_all_four_fields(clean_env):
     assert settings.dataverse_url == "https://org.crm.dynamics.com"
 
 
-def test_trailing_slash_is_stripped_from_dataverse_url(clean_env):
+def test_trailing_slash_is_stripped_from_dataverse_url(clean_env: pytest.MonkeyPatch) -> None:
     """A trailing slash on dataverse_url is removed so downstream URL-joining never double-slashes."""
     settings = DataverseConnectionSettings(
         azure_tenant_id="tenant-id",

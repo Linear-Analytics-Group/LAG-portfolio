@@ -158,8 +158,7 @@ class DataverseClient(ODataClient):
 
     @classmethod
     def from_settings(cls, settings: DataverseConnectionSettings) -> "DataverseClient":
-        """Construct a ``DataverseClient`` from any object satisfying 
-        `DataverseConnectionSettings`.
+        """Construct a ``DataverseClient`` from any object satisfying ``DataverseConnectionSettings``.
 
         Parameters
         ----------

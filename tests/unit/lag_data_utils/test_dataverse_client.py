@@ -15,6 +15,8 @@ from lag_data_utils.clients.dataverse import (
     DataverseConnectionSettings,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class _FakeMsalApp:
     """A controllable stand-in for msal.ConfidentialClientApplication."""
@@ -51,12 +53,14 @@ def client(fake_msal_app: _FakeMsalApp) -> DataverseClient:
     )
 
 
-def test_environment_url_trailing_slash_is_stripped(client):
+def test_environment_url_trailing_slash_is_stripped(client: DataverseClient) -> None:
     """A trailing slash on environment_url is stripped, so base_url never has a double slash."""
     assert client.base_url == "https://fake-org.crm.dynamics.com/api/data/v9.2"
 
 
-def test_acquire_bearer_token_returns_cached_token_without_fetching_a_new_one(client, fake_msal_app):
+def test_acquire_bearer_token_returns_cached_token_without_fetching_a_new_one(
+    client: DataverseClient, fake_msal_app: _FakeMsalApp
+) -> None:
     """A cache hit (acquire_token_silent succeeds) is returned directly, never falling back."""
     fake_msal_app.silent_result = {"access_token": "cached-token"}
 
@@ -66,7 +70,9 @@ def test_acquire_bearer_token_returns_cached_token_without_fetching_a_new_one(cl
     assert fake_msal_app.for_client_call_count == 0
 
 
-def test_acquire_bearer_token_fetches_fresh_token_on_cache_miss(client, fake_msal_app):
+def test_acquire_bearer_token_fetches_fresh_token_on_cache_miss(
+    client: DataverseClient, fake_msal_app: _FakeMsalApp
+) -> None:
     """A cache miss (acquire_token_silent returns None) falls back to a fresh client-credentials grant."""
     fake_msal_app.silent_result = None
     fake_msal_app.for_client_result = {"access_token": "fresh-token"}
@@ -77,7 +83,9 @@ def test_acquire_bearer_token_fetches_fresh_token_on_cache_miss(client, fake_msa
     assert fake_msal_app.for_client_call_count == 1
 
 
-def test_acquire_bearer_token_raises_with_entra_error_description_on_rejection(client, fake_msal_app):
+def test_acquire_bearer_token_raises_with_entra_error_description_on_rejection(
+    client: DataverseClient, fake_msal_app: _FakeMsalApp
+) -> None:
     """A rejected grant raises DataverseAuthenticationError carrying Entra ID's error description."""
     fake_msal_app.silent_result = None
     fake_msal_app.for_client_result = {
@@ -91,7 +99,9 @@ def test_acquire_bearer_token_raises_with_entra_error_description_on_rejection(c
     assert "AADSTS7000215" in str(exc_info.value)
 
 
-def test_acquire_bearer_token_raises_with_default_message_when_msal_returns_nothing(client, fake_msal_app):
+def test_acquire_bearer_token_raises_with_default_message_when_msal_returns_nothing(
+    client: DataverseClient, fake_msal_app: _FakeMsalApp
+) -> None:
     """No result at all from MSAL still raises cleanly, with a sensible default message."""
     fake_msal_app.silent_result = None
     fake_msal_app.for_client_result = None
@@ -102,7 +112,9 @@ def test_acquire_bearer_token_raises_with_default_message_when_msal_returns_noth
     assert "No error description returned" in str(exc_info.value)
 
 
-def test_get_headers_includes_prefer_return_representation(client, fake_msal_app):
+def test_get_headers_includes_prefer_return_representation(
+    client: DataverseClient, fake_msal_app: _FakeMsalApp
+) -> None:
     """Dataverse-specific headers extend, rather than replace, the standard OData v4 headers."""
     fake_msal_app.silent_result = {"access_token": "cached-token"}
 
@@ -113,7 +125,7 @@ def test_get_headers_includes_prefer_return_representation(client, fake_msal_app
     assert headers["OData-Version"] == "4.0"
 
 
-def test_from_settings_builds_a_client_from_any_matching_object(monkeypatch: pytest.MonkeyPatch):
+def test_from_settings_builds_a_client_from_any_matching_object(monkeypatch: pytest.MonkeyPatch) -> None:
     """from_settings() accepts any object exposing the four required attributes — no import needed."""
     monkeypatch.setattr("msal.ConfidentialClientApplication", lambda *a, **k: _FakeMsalApp())
 
@@ -126,6 +138,6 @@ def test_from_settings_builds_a_client_from_any_matching_object(monkeypatch: pyt
     settings = _StubSettings()
     assert isinstance(settings, DataverseConnectionSettings)
 
-    client = DataverseClient.from_settings(settings)  # type: ignore[arg-type]
+    client = DataverseClient.from_settings(settings)
 
     assert client.base_url == "https://stub-org.crm.dynamics.com/api/data/v9.2"

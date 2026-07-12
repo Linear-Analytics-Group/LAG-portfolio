@@ -19,6 +19,8 @@ from lag_data_utils.clients.base import AuthenticationError, BaseClient
 from lag_service_kit.runners import BaseSyncRunner
 from pydantic import BaseModel, ValidationError
 
+pytestmark = pytest.mark.unit
+
 
 class _FakeSettings(BaseModel):
     log_level: str = "INFO"
@@ -44,7 +46,7 @@ class _FakeClient(BaseClient):
         return "fake-token"
 
 
-class _RecordingRunner(BaseSyncRunner):
+class _RecordingRunner(BaseSyncRunner[_FakeClient]):
     """Records the order hooks are called in, so run()'s sequence can be asserted on."""
 
     def __init__(self, fail_settings: bool = False, fail_auth: bool = False):
@@ -76,7 +78,7 @@ class _RecordingRunner(BaseSyncRunner):
         return {"created": len(records), "updated": 0, "failed": 0}
 
 
-def test_run_calls_hooks_in_the_documented_order():
+def test_run_calls_hooks_in_the_documented_order() -> None:
     """load_settings -> build_client -> acquire_bearer_token -> load_records -> sync_records."""
     runner = _RecordingRunner()
 
@@ -86,12 +88,12 @@ def test_run_calls_hooks_in_the_documented_order():
     assert runner.calls == ["load_settings", "build_client", "load_records", "sync_records"]
 
 
-def test_run_returns_zero_when_nothing_failed():
+def test_run_returns_zero_when_nothing_failed() -> None:
     """A clean sync (zero failed records) exits 0."""
     assert _RecordingRunner().run() == 0
 
 
-def test_run_reports_failure_via_exit_code_even_when_most_records_succeeded():
+def test_run_reports_failure_via_exit_code_even_when_most_records_succeeded() -> None:
     """run()'s exit code reflects a nonzero failed count, independent of how sync_records got there.
 
     This deliberately does *not* test whether sync_records() kept
@@ -109,7 +111,7 @@ def test_run_reports_failure_via_exit_code_even_when_most_records_succeeded():
     assert _MostlySucceededRunner().run() == 1
 
 
-def test_run_returns_one_and_short_circuits_on_configuration_error():
+def test_run_returns_one_and_short_circuits_on_configuration_error() -> None:
     """A ValidationError from load_settings() is caught, logged, and stops before build_client()."""
     runner = _RecordingRunner(fail_settings=True)
 
@@ -119,7 +121,7 @@ def test_run_returns_one_and_short_circuits_on_configuration_error():
     assert runner.calls == ["load_settings"]
 
 
-def test_run_returns_one_and_short_circuits_on_authentication_error():
+def test_run_returns_one_and_short_circuits_on_authentication_error() -> None:
     """An AuthenticationError from acquire_bearer_token() is caught and stops before load_records()."""
     runner = _RecordingRunner(fail_auth=True)
 

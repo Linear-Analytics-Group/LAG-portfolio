@@ -8,11 +8,14 @@ of the batch from syncing.
 """
 
 import re
+from typing import Callable
 
 import pytest
 import responses
-from lag_data_utils.clients.dataverse import DataverseAuthenticationError
+from lag_data_utils.clients.dataverse import DataverseAuthenticationError, DataverseClient
 from pydantic import BaseModel, ValidationError
+from runners.dataverse import DataverseInventorySyncRunner
+from sources import CsvInventorySource
 
 UPSERT_URL_PATTERN = re.compile(r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$")
 
@@ -33,7 +36,12 @@ def _build_validation_error() -> ValidationError:
 
 
 @pytest.mark.acceptance
-def test_missing_configuration_is_reported_and_run_fails(dataverse_runner_factory, csv_source, monkeypatch, capsys):
+def test_missing_configuration_is_reported_and_run_fails(
+    dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
+    csv_source: CsvInventorySource,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """A configuration error is logged clearly and reported via a definite exit code, not a crash."""
     runner = dataverse_runner_factory(csv_source)
     validation_error = _build_validation_error()
@@ -47,11 +55,15 @@ def test_missing_configuration_is_reported_and_run_fails(dataverse_runner_factor
 
 @pytest.mark.acceptance
 def test_authentication_failure_is_reported_and_run_fails(
-    dataverse_runner_factory, csv_source, dataverse_client, monkeypatch, capsys
-):
+    dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
+    csv_source: CsvInventorySource,
+    dataverse_client: DataverseClient,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """An Entra ID authentication failure is logged clearly and reported via a definite exit code."""
 
-    def _raise_auth_error():
+    def _raise_auth_error() -> str:
         raise DataverseAuthenticationError("Entra ID rejected the client credentials.")
 
     monkeypatch.setattr(dataverse_client, "acquire_bearer_token", _raise_auth_error)
@@ -65,7 +77,11 @@ def test_authentication_failure_is_reported_and_run_fails(
 
 @pytest.mark.acceptance
 @responses.activate
-def test_one_failed_record_does_not_stop_the_rest_from_syncing(dataverse_runner_factory, csv_source, capsys):
+def test_one_failed_record_does_not_stop_the_rest_from_syncing(
+    dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
+    csv_source: CsvInventorySource,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """A single record's HTTP failure is counted and logged, but the batch keeps going."""
     responses.add(
         responses.PATCH,

@@ -1,1 +1,1 @@
-"""Acceptance tests: does the system satisfy README.md's business requirements?"""
+"""Acceptance tests: does the system satisfy README.md's business requirements."""

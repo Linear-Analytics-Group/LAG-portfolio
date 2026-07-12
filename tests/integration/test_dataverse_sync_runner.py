@@ -13,6 +13,7 @@ import re
 import pytest
 import responses
 from runners.dataverse import DataverseInventorySyncRunner
+from sources import CsvInventorySource
 
 UPSERT_URL_PATTERN = re.compile(r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$")
 
@@ -32,7 +33,9 @@ class _FakeConfidentialClientApplication:
 
 @pytest.mark.integration
 @responses.activate
-def test_run_wires_real_settings_and_client_to_the_configured_environment(monkeypatch, csv_source):
+def test_run_wires_real_settings_and_client_to_the_configured_environment(
+    monkeypatch: pytest.MonkeyPatch, csv_source: CsvInventorySource
+) -> None:
     """The runner's real load_settings()/build_client() point the client at the configured URL."""
     monkeypatch.setenv("AZURE_TENANT_ID", "test-tenant-id")
     monkeypatch.setenv("AZURE_CLIENT_ID", "test-client-id")
@@ -48,7 +51,7 @@ def test_run_wires_real_settings_and_client_to_the_configured_environment(monkey
     assert exit_code == 0
     assert len(responses.calls) == 3
     assert all(
-        call.request.url.startswith(
+        (call.request.url or "").startswith(
             "https://test-org.crm.dynamics.com/api/data/v9.2/lagsol_inventoryitems"
         )
         for call in responses.calls
@@ -57,7 +60,9 @@ def test_run_wires_real_settings_and_client_to_the_configured_environment(monkey
 
 @pytest.mark.integration
 @responses.activate
-def test_run_sends_the_bearer_token_msal_actually_returns(monkeypatch, csv_source):
+def test_run_sends_the_bearer_token_msal_actually_returns(
+    monkeypatch: pytest.MonkeyPatch, csv_source: CsvInventorySource
+) -> None:
     """The Authorization header carries the exact token the (fake) MSAL app issued."""
     monkeypatch.setenv("AZURE_TENANT_ID", "test-tenant-id")
     monkeypatch.setenv("AZURE_CLIENT_ID", "test-client-id")

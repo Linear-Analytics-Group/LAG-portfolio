@@ -7,7 +7,10 @@ isolation.
 """
 
 import pandas as pd
+import pytest
 from runners.base import DEDUPE_KEY, InventoryDomainMixin
+
+pytestmark = pytest.mark.unit
 
 
 class _StubSource:
@@ -20,20 +23,20 @@ class _StubSource:
         return self._records
 
 
-def test_default_dedupe_key_is_sku_id():
+def test_default_dedupe_key_is_sku_id() -> None:
     """The mixin's default dedupe_key matches the inventory domain's business key."""
     assert InventoryDomainMixin.dedupe_key == "sku_id"
     assert DEDUPE_KEY == "sku_id"
 
 
-def test_constructor_binds_the_given_source():
+def test_constructor_binds_the_given_source() -> None:
     """The source passed to __init__ is stored as self.source, unmodified."""
     source = _StubSource(pd.DataFrame())
     mixin = InventoryDomainMixin(source=source)
     assert mixin.source is source
 
 
-def test_load_records_reads_from_the_bound_source_and_deduplicates():
+def test_load_records_reads_from_the_bound_source_and_deduplicates() -> None:
     """load_records() calls source.read_records() and dedupes by dedupe_key."""
     raw = pd.DataFrame(
         [
@@ -51,7 +54,7 @@ def test_load_records_reads_from_the_bound_source_and_deduplicates():
     assert updated_row["item_name"] == "Widget (updated)"
 
 
-def test_load_records_never_calls_read_records_more_than_once():
+def test_load_records_never_calls_read_records_more_than_once() -> None:
     """Each call to load_records() reads the source exactly once, not once per row processed."""
 
     class _CountingSource(_StubSource):
