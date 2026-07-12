@@ -26,19 +26,25 @@ class _FakeMsalApp:
         self.for_client_result: Optional[Dict[str, Any]] = None
         self.for_client_call_count = 0
 
-    def acquire_token_silent(self, scopes, account):  # type: ignore[no-untyped-def]
+    def acquire_token_silent(  # type: ignore[no-untyped-def]
+        self, scopes, account
+    ):
         return self.silent_result
 
-    def acquire_token_for_client(self, scopes):  # type: ignore[no-untyped-def]
+    def acquire_token_for_client(  # type: ignore[no-untyped-def]
+        self, scopes
+    ):
         self.for_client_call_count += 1
         return self.for_client_result
 
 
 @pytest.fixture
 def fake_msal_app(monkeypatch: pytest.MonkeyPatch) -> _FakeMsalApp:
-    """Patch msal.ConfidentialClientApplication and return the controllable fake instance."""
+    """Patch msal.ConfidentialClientApplication with the controllable fake."""
     fake_app = _FakeMsalApp()
-    monkeypatch.setattr("msal.ConfidentialClientApplication", lambda *a, **k: fake_app)
+    monkeypatch.setattr(
+        "msal.ConfidentialClientApplication", lambda *a, **k: fake_app
+    )
     return fake_app
 
 
@@ -53,15 +59,17 @@ def client(fake_msal_app: _FakeMsalApp) -> DataverseClient:
     )
 
 
-def test_environment_url_trailing_slash_is_stripped(client: DataverseClient) -> None:
-    """A trailing slash on environment_url is stripped, so base_url never has a double slash."""
+def test_environment_url_trailing_slash_is_stripped(
+    client: DataverseClient,
+) -> None:
+    """A trailing slash on environment_url never doubles up in base_url."""
     assert client.base_url == "https://fake-org.crm.dynamics.com/api/data/v9.2"
 
 
 def test_acquire_bearer_token_returns_cached_token_without_fetching_a_new_one(
     client: DataverseClient, fake_msal_app: _FakeMsalApp
 ) -> None:
-    """A cache hit (acquire_token_silent succeeds) is returned directly, never falling back."""
+    """A cache hit (acquire_token_silent succeeds) never falls back."""
     fake_msal_app.silent_result = {"access_token": "cached-token"}
 
     token = client.acquire_bearer_token()
@@ -73,7 +81,7 @@ def test_acquire_bearer_token_returns_cached_token_without_fetching_a_new_one(
 def test_acquire_bearer_token_fetches_fresh_token_on_cache_miss(
     client: DataverseClient, fake_msal_app: _FakeMsalApp
 ) -> None:
-    """A cache miss (acquire_token_silent returns None) falls back to a fresh client-credentials grant."""
+    """A cache miss falls back to a fresh client-credentials grant."""
     fake_msal_app.silent_result = None
     fake_msal_app.for_client_result = {"access_token": "fresh-token"}
 
@@ -86,7 +94,7 @@ def test_acquire_bearer_token_fetches_fresh_token_on_cache_miss(
 def test_acquire_bearer_token_raises_with_entra_error_description_on_rejection(
     client: DataverseClient, fake_msal_app: _FakeMsalApp
 ) -> None:
-    """A rejected grant raises DataverseAuthenticationError carrying Entra ID's error description."""
+    """A rejected grant raises with Entra ID's error description."""
     fake_msal_app.silent_result = None
     fake_msal_app.for_client_result = {
         "error": "invalid_client",
@@ -99,10 +107,10 @@ def test_acquire_bearer_token_raises_with_entra_error_description_on_rejection(
     assert "AADSTS7000215" in str(exc_info.value)
 
 
-def test_acquire_bearer_token_raises_with_default_message_when_msal_returns_nothing(
+def test_acquire_bearer_token_raises_when_msal_returns_nothing(
     client: DataverseClient, fake_msal_app: _FakeMsalApp
 ) -> None:
-    """No result at all from MSAL still raises cleanly, with a sensible default message."""
+    """No result at all from MSAL still raises with a sensible default."""
     fake_msal_app.silent_result = None
     fake_msal_app.for_client_result = None
 
@@ -115,7 +123,7 @@ def test_acquire_bearer_token_raises_with_default_message_when_msal_returns_noth
 def test_get_headers_includes_prefer_return_representation(
     client: DataverseClient, fake_msal_app: _FakeMsalApp
 ) -> None:
-    """Dataverse-specific headers extend, rather than replace, the standard OData v4 headers."""
+    """Dataverse headers extend, rather than replace, the OData v4 ones."""
     fake_msal_app.silent_result = {"access_token": "cached-token"}
 
     headers = client._get_headers()
@@ -125,9 +133,13 @@ def test_get_headers_includes_prefer_return_representation(
     assert headers["OData-Version"] == "4.0"
 
 
-def test_from_settings_builds_a_client_from_any_matching_object(monkeypatch: pytest.MonkeyPatch) -> None:
-    """from_settings() accepts any object exposing the four required attributes — no import needed."""
-    monkeypatch.setattr("msal.ConfidentialClientApplication", lambda *a, **k: _FakeMsalApp())
+def test_from_settings_builds_a_client_from_any_matching_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """from_settings() accepts any object with the four required attrs."""
+    monkeypatch.setattr(
+        "msal.ConfidentialClientApplication", lambda *a, **k: _FakeMsalApp()
+    )
 
     class _StubSettings:
         azure_tenant_id = "stub-tenant-id"

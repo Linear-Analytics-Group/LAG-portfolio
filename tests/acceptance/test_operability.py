@@ -12,22 +12,27 @@ from typing import Callable
 
 import pytest
 import responses
-from lag_data_utils.clients.dataverse import DataverseAuthenticationError, DataverseClient
+from lag_data_utils.clients.dataverse import (
+    DataverseAuthenticationError,
+    DataverseClient,
+)
 from pydantic import BaseModel, ValidationError
 from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource
 
-UPSERT_URL_PATTERN = re.compile(r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$")
+UPSERT_URL_PATTERN = re.compile(
+    r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$"
+)
 
 
 class _RequiredFieldProbe(BaseModel):
-    """A minimal model used only to manufacture a real ``pydantic.ValidationError``."""
+    """A minimal model used only to manufacture a real validation error."""
 
     required_field: str
 
 
 def _build_validation_error() -> ValidationError:
-    """Produce a real ``pydantic.ValidationError`` with zero environment dependency."""
+    """Produce a real ``ValidationError`` with zero environment dependency."""
     try:
         _RequiredFieldProbe()  # type: ignore[call-arg]
     except ValidationError as exc:
@@ -42,10 +47,12 @@ def test_missing_configuration_is_reported_and_run_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A configuration error is logged clearly and reported via a definite exit code, not a crash."""
+    """A configuration error is logged and reported via a definite exit code."""
     runner = dataverse_runner_factory(csv_source)
     validation_error = _build_validation_error()
-    monkeypatch.setattr(runner, "load_settings", lambda: (_ for _ in ()).throw(validation_error))
+    monkeypatch.setattr(
+        runner, "load_settings", lambda: (_ for _ in ()).throw(validation_error)
+    )
 
     exit_code = runner.run()
 
@@ -61,12 +68,16 @@ def test_authentication_failure_is_reported_and_run_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """An Entra ID authentication failure is logged clearly and reported via a definite exit code."""
+    """An Entra ID auth failure is logged and reported via an exit code."""
 
     def _raise_auth_error() -> str:
-        raise DataverseAuthenticationError("Entra ID rejected the client credentials.")
+        raise DataverseAuthenticationError(
+            "Entra ID rejected the client credentials."
+        )
 
-    monkeypatch.setattr(dataverse_client, "acquire_bearer_token", _raise_auth_error)
+    monkeypatch.setattr(
+        dataverse_client, "acquire_bearer_token", _raise_auth_error
+    )
     runner = dataverse_runner_factory(csv_source)
 
     exit_code = runner.run()
@@ -82,7 +93,7 @@ def test_one_failed_record_does_not_stop_the_rest_from_syncing(
     csv_source: CsvInventorySource,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A single record's HTTP failure is counted and logged, but the batch keeps going."""
+    """One record's HTTP failure is counted and logged; the batch continues."""
     responses.add(
         responses.PATCH,
         re.compile(r".*/lagsol_inventoryitems\(lagsol_skuid='SKU-002'\)$"),

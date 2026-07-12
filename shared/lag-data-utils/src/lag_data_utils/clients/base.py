@@ -6,39 +6,42 @@ from abc import ABC, abstractmethod
 class AuthenticationError(Exception):
     """Root of the connector authentication-failure hierarchy.
 
-    Raised (via a system-specific subclass, e.g. ``DataverseAuthenticationError``)
-    when a connector's identity provider rejects its credentials or its
-    token response cannot be parsed or validated. Orchestration code that
-    must remain agnostic to which destination system it is talking to
-    (e.g. a sync runner) should catch this base class rather than any
-    concrete subclass.
+    Raised (via a system-specific subclass, e.g.
+    ``DataverseAuthenticationError``) when a connector's identity
+    provider rejects its credentials or its token response cannot be
+    parsed or validated. Orchestration code that must remain agnostic
+    to which destination system it is talking to (e.g. a sync runner)
+    should catch this base class rather than any concrete subclass.
     """
 
     pass
 
 
 class BaseClient(ABC):
-    """Protocol-agnostic base class defining the minimum authentication contract for all connectors.
+    """Base class defining the minimum authentication contract.
 
-    ``BaseClient`` is the root of the Linear Analytics Group connector hierarchy.
-    It establishes a single, universal obligation that every downstream integration
-    adapter must fulfill: the ability to acquire a valid Bearer token from its
-    identity provider before any data operations are attempted.
+    ``BaseClient`` is the root of the Linear Analytics Group connector
+    hierarchy. It establishes a single, universal obligation that
+    every downstream integration adapter must fulfill: the ability to
+    acquire a valid Bearer token from its identity provider before any
+    data operations are attempted.
 
-    The class is intentionally minimal. It makes no assumptions about the transport
-    protocol (HTTP, gRPC, ODBC), the data format (JSON, XML, Parquet), or the
-    persistence model (REST, SOAP, bulk load). Those concerns belong to
-    protocol-specific subclasses further down the inheritance chain (e.g.,
-    ``ODataClient``). By keeping this contract thin, new connector families can
-    be introduced without inheriting unrelated interface requirements.
+    The class is intentionally minimal. It makes no assumptions about
+    the transport protocol (HTTP, gRPC, ODBC), the data format (JSON,
+    XML, Parquet), or the persistence model (REST, SOAP, bulk load).
+    Those concerns belong to protocol-specific subclasses further down
+    the inheritance chain (e.g., ``ODataClient``). By keeping this
+    contract thin, new connector families can be introduced without
+    inheriting unrelated interface requirements.
 
     Notes
     -----
-    All concrete connector implementations must ultimately inherit from this class,
-    either directly or through an intermediate abstract layer. Higher-level
-    orchestration components (pipeline runners, sync engines, job schedulers)
-    should program to this interface — or to a more specific descendant — rather
-    than to any concrete connector type, preserving substitutability across
+    All concrete connector implementations must ultimately inherit
+    from this class, either directly or through an intermediate
+    abstract layer. Higher-level orchestration components (pipeline
+    runners, sync engines, job schedulers) should program to this
+    interface — or to a more specific descendant — rather than to any
+    concrete connector type, preserving substitutability across
     destination systems.
 
     Examples
@@ -58,14 +61,15 @@ class BaseClient(ABC):
 
     @abstractmethod
     def acquire_bearer_token(self) -> str:
-        """Acquire a valid OAuth 2.0 Bearer token from the destination system's identity provider.
+        """Acquire a Bearer token from the destination's identity provider.
 
-        Executes the configured authentication flow — typically the OAuth 2.0
-        Client Credentials grant — against the destination system's identity
-        provider. Implementations are solely responsible for the full token
-        lifecycle: sourcing credentials from secure storage, acquiring the
-        initial token, serving cached tokens on repeat calls, and proactively
-        refreshing tokens before they expire.
+        Executes the configured authentication flow — typically the
+        OAuth 2.0 Client Credentials grant — against the destination
+        system's identity provider. Implementations are solely
+        responsible for the full token lifecycle: sourcing credentials
+        from secure storage, acquiring the initial token, serving
+        cached tokens on repeat calls, and proactively refreshing
+        tokens before they expire.
 
         Returns
         -------

@@ -15,9 +15,11 @@ from pydantic_settings import SettingsConfigDict
 class InventorySyncSettings(DataverseConnectionSettings, BaseServiceSettings):
     """Runtime configuration for the ERP-to-Dataverse inventory sync engine.
 
-    Combines :class:`lag_service_kit.dataverse_settings.DataverseConnectionSettings`
+    Combines
+    :class:`lag_service_kit.dataverse_settings.DataverseConnectionSettings`
     (``azure_tenant_id``, ``azure_client_id``, ``azure_client_secret``,
-    ``dataverse_url``) with :class:`lag_service_kit.settings.BaseServiceSettings`
+    ``dataverse_url``) with
+    :class:`lag_service_kit.settings.BaseServiceSettings`
     (``log_level``). This service adds no fields of its own.
 
     Raises

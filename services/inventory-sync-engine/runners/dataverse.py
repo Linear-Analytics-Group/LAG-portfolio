@@ -24,7 +24,9 @@ from .base import InventoryDomainMixin
 from .odata import BaseODataInventorySyncRunner
 
 
-class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncRunner):
+class DataverseInventorySyncRunner(
+    InventoryDomainMixin, BaseODataInventorySyncRunner
+):
     """Syncs ERP inventory records into Microsoft Dataverse.
 
     Notes
@@ -37,8 +39,8 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncR
 
     A future destination that also speaks OData v4 (e.g. SAP S/4HANA
     Cloud, SharePoint Online) is added by writing a sibling module —
-    ``runners/sap.py`` — with a leaf class combining the same two bases:
-    ``class SapInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncRunner)``,
+    ``runners/sap.py`` — with a leaf class combining the same two
+    bases (``InventoryDomainMixin``, ``BaseODataInventorySyncRunner``),
     supplying only its own settings, client, entity set, alternate key,
     and field mapping. A future destination that speaks a *different*
     wire protocol (e.g. SOAP) instead combines ``InventoryDomainMixin``
@@ -71,7 +73,7 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncR
         return "lagsol_skuid"
 
     def load_settings(self) -> InventorySyncSettings:
-        """Load Entra ID and Dataverse connection settings from the environment/`.env`.
+        """Load Entra ID and Dataverse settings from the environment/`.env`.
 
         Returns
         -------
@@ -79,7 +81,8 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncR
             Validated configuration for authenticating against and
             addressing the target Dataverse environment.
         """
-        return InventorySyncSettings()  # type: ignore[call-arg]  # fields sourced from env/`.env`
+        # Required fields are sourced from the environment/`.env` file.
+        return InventorySyncSettings()  # type: ignore[call-arg]
 
     def build_client(self, settings: InventorySyncSettings) -> DataverseClient:
         """Construct a ``DataverseClient`` from validated settings.

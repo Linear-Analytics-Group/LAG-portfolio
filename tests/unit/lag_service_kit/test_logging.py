@@ -9,7 +9,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_configure_logging_sets_the_root_logger_level() -> None:
-    """The root logger's effective level matches the requested log_level, case-insensitively."""
+    """The effective level matches log_level, case-insensitively."""
     configure_logging("debug")
     assert logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
@@ -24,7 +24,7 @@ def test_configure_logging_defaults_to_info() -> None:
 
 
 def test_configure_logging_rejects_an_unknown_level_name() -> None:
-    """An unrecognized level name raises ValueError rather than silently defaulting."""
+    """An unrecognized level name raises rather than silently defaulting."""
     with pytest.raises(ValueError):
         configure_logging("NOT_A_REAL_LEVEL")
 

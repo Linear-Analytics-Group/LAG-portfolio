@@ -15,11 +15,13 @@ import responses
 from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource
 
-UPSERT_URL_PATTERN = re.compile(r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$")
+UPSERT_URL_PATTERN = re.compile(
+    r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$"
+)
 
 
 class _FakeConfidentialClientApplication:
-    """Stands in for ``msal.ConfidentialClientApplication`` with no network I/O."""
+    """Stands in for ``msal.ConfidentialClientApplication``, no network I/O."""
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         pass
@@ -27,7 +29,9 @@ class _FakeConfidentialClientApplication:
     def acquire_token_silent(self, *args: object, **kwargs: object) -> None:
         return None
 
-    def acquire_token_for_client(self, *args: object, **kwargs: object) -> dict:  # type: ignore[type-arg]
+    def acquire_token_for_client(
+        self, *args: object, **kwargs: object
+    ) -> dict:  # type: ignore[type-arg]
         return {"access_token": "fake-integration-test-token"}
 
 
@@ -36,13 +40,16 @@ class _FakeConfidentialClientApplication:
 def test_run_wires_real_settings_and_client_to_the_configured_environment(
     monkeypatch: pytest.MonkeyPatch, csv_source: CsvInventorySource
 ) -> None:
-    """The runner's real load_settings()/build_client() point the client at the configured URL."""
+    """The real load_settings()/build_client() target the configured URL."""
     monkeypatch.setenv("AZURE_TENANT_ID", "test-tenant-id")
     monkeypatch.setenv("AZURE_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("AZURE_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv("DATAVERSE_URL", "https://test-org.crm.dynamics.com")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-    monkeypatch.setattr("msal.ConfidentialClientApplication", _FakeConfidentialClientApplication)
+    monkeypatch.setattr(
+        "msal.ConfidentialClientApplication",
+        _FakeConfidentialClientApplication,
+    )
     responses.add(responses.PATCH, UPSERT_URL_PATTERN, status=201)
 
     runner = DataverseInventorySyncRunner(source=csv_source)
@@ -50,10 +57,12 @@ def test_run_wires_real_settings_and_client_to_the_configured_environment(
 
     assert exit_code == 0
     assert len(responses.calls) == 3
+    expected_prefix = (
+        "https://test-org.crm.dynamics.com/api/data/v9.2/"
+        "lagsol_inventoryitems"
+    )
     assert all(
-        (call.request.url or "").startswith(
-            "https://test-org.crm.dynamics.com/api/data/v9.2/lagsol_inventoryitems"
-        )
+        (call.request.url or "").startswith(expected_prefix)
         for call in responses.calls
     )
 
@@ -63,17 +72,21 @@ def test_run_wires_real_settings_and_client_to_the_configured_environment(
 def test_run_sends_the_bearer_token_msal_actually_returns(
     monkeypatch: pytest.MonkeyPatch, csv_source: CsvInventorySource
 ) -> None:
-    """The Authorization header carries the exact token the (fake) MSAL app issued."""
+    """The Authorization header carries the exact token the fake MSAL issued."""
     monkeypatch.setenv("AZURE_TENANT_ID", "test-tenant-id")
     monkeypatch.setenv("AZURE_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("AZURE_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv("DATAVERSE_URL", "https://test-org.crm.dynamics.com")
-    monkeypatch.setattr("msal.ConfidentialClientApplication", _FakeConfidentialClientApplication)
+    monkeypatch.setattr(
+        "msal.ConfidentialClientApplication",
+        _FakeConfidentialClientApplication,
+    )
     responses.add(responses.PATCH, UPSERT_URL_PATTERN, status=201)
 
     DataverseInventorySyncRunner(source=csv_source).run()
 
     assert all(
-        call.request.headers["Authorization"] == "Bearer fake-integration-test-token"
+        call.request.headers["Authorization"]
+        == "Bearer fake-integration-test-token"
         for call in responses.calls
     )

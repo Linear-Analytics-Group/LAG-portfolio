@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 
 
 class DataverseConnectionSettings(BaseSettings):
-    """Entra ID / Dataverse connection fields shared by every Dataverse-backed service.
+    """Entra ID / Dataverse connection fields for a Dataverse-backed service.
 
     Parameters
     ----------

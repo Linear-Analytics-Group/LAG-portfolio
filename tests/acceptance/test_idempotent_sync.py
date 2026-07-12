@@ -20,7 +20,9 @@ import responses
 from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource
 
-UPSERT_URL_PATTERN = re.compile(r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$")
+UPSERT_URL_PATTERN = re.compile(
+    r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$"
+)
 
 
 @pytest.mark.acceptance
@@ -30,13 +32,14 @@ def test_new_records_are_reported_as_created(
     csv_source: CsvInventorySource,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A run against a destination with no matching records reports them all as created."""
+    """A run against an empty destination reports every record as created."""
     responses.add(responses.PATCH, UPSERT_URL_PATTERN, status=201)
 
     exit_code = dataverse_runner_factory(csv_source).run()
 
     assert exit_code == 0
-    assert "3 created, 0 updated, 0 failed (of 3 records)" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "3 created, 0 updated, 0 failed (of 3 records)" in output
 
 
 @pytest.mark.acceptance
@@ -46,21 +49,23 @@ def test_existing_records_are_updated_not_duplicated(
     csv_source: CsvInventorySource,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A run against a destination that already has these records reports updates, not creates."""
+    """A run against a destination with these records reports updates."""
     responses.add(responses.PATCH, UPSERT_URL_PATTERN, status=204)
 
     exit_code = dataverse_runner_factory(csv_source).run()
 
     assert exit_code == 0
-    assert "0 created, 3 updated, 0 failed (of 3 records)" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "0 created, 3 updated, 0 failed (of 3 records)" in output
 
 
 @pytest.mark.acceptance
 @responses.activate
 def test_sync_never_performs_a_check_then_act_loop(
-    dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner], csv_source: CsvInventorySource
+    dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
+    csv_source: CsvInventorySource,
 ) -> None:
-    """Every write is a PATCH; the sync never issues a GET (read) before deciding whether to write.
+    """Every write is a PATCH; the sync never issues a GET before writing.
 
     This is the literal architectural guarantee: idempotency comes from
     the HTTP verb semantics of the upsert itself, not from application
@@ -81,11 +86,12 @@ def test_rerunning_the_same_feed_converges_to_all_updates(
     csv_source: CsvInventorySource,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Running the same feed twice: the second run reports every record as updated, none created."""
+    """Running the same feed twice reports the second run as all updates."""
     responses.add(responses.PATCH, UPSERT_URL_PATTERN, status=201)
     first_exit_code = dataverse_runner_factory(csv_source).run()
     assert first_exit_code == 0
-    assert "3 created, 0 updated, 0 failed (of 3 records)" in capsys.readouterr().out
+    first_output = capsys.readouterr().out
+    assert "3 created, 0 updated, 0 failed (of 3 records)" in first_output
 
     responses.reset()
     responses.calls.reset()
@@ -94,4 +100,5 @@ def test_rerunning_the_same_feed_converges_to_all_updates(
     second_exit_code = dataverse_runner_factory(csv_source).run()
 
     assert second_exit_code == 0
-    assert "0 created, 3 updated, 0 failed (of 3 records)" in capsys.readouterr().out
+    second_output = capsys.readouterr().out
+    assert "0 created, 3 updated, 0 failed (of 3 records)" in second_output

@@ -24,7 +24,7 @@ class _StubSource:
 
 
 def test_default_dedupe_key_is_sku_id() -> None:
-    """The mixin's default dedupe_key matches the inventory domain's business key."""
+    """The mixin's default dedupe_key matches the domain's business key."""
     assert InventoryDomainMixin.dedupe_key == "sku_id"
     assert DEDUPE_KEY == "sku_id"
 
@@ -41,7 +41,11 @@ def test_load_records_reads_from_the_bound_source_and_deduplicates() -> None:
     raw = pd.DataFrame(
         [
             {"sku_id": "SKU-001", "item_name": "Widget", "unit_price": 9.99},
-            {"sku_id": "SKU-001", "item_name": "Widget (updated)", "unit_price": 12.50},
+            {
+                "sku_id": "SKU-001",
+                "item_name": "Widget (updated)",
+                "unit_price": 12.50,
+            },
             {"sku_id": "SKU-002", "item_name": "Gadget", "unit_price": 4.00},
         ]
     )
@@ -55,7 +59,7 @@ def test_load_records_reads_from_the_bound_source_and_deduplicates() -> None:
 
 
 def test_load_records_never_calls_read_records_more_than_once() -> None:
-    """Each call to load_records() reads the source exactly once, not once per row processed."""
+    """load_records() reads the source exactly once, not once per row."""
 
     class _CountingSource(_StubSource):
         def __init__(self, records: pd.DataFrame) -> None:
@@ -66,7 +70,8 @@ def test_load_records_never_calls_read_records_more_than_once() -> None:
             self.read_count += 1
             return super().read_records()
 
-    source = _CountingSource(pd.DataFrame([{"sku_id": "SKU-001", "item_name": "x", "unit_price": 1.0}]))
+    row = {"sku_id": "SKU-001", "item_name": "x", "unit_price": 1.0}
+    source = _CountingSource(pd.DataFrame([row]))
     mixin = InventoryDomainMixin(source=source)
 
     mixin.load_records()

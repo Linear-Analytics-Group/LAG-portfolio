@@ -1,4 +1,7 @@
-"""Unit tests for lag_service_kit.settings: BaseServiceSettings, find_repo_env_file."""
+"""Unit tests for lag_service_kit.settings.
+
+Covers BaseServiceSettings, find_repo_env_file.
+"""
 
 from pathlib import Path
 
@@ -14,7 +17,9 @@ def test_log_level_defaults_to_info(clean_env: pytest.MonkeyPatch) -> None:
     assert settings.log_level == "INFO"
 
 
-def test_log_level_reads_from_environment(clean_env: pytest.MonkeyPatch, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_level_reads_from_environment(
+    clean_env: pytest.MonkeyPatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """log_level reads from the LOG_LEVEL environment variable."""
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     settings = BaseServiceSettings()
@@ -30,8 +35,10 @@ def test_log_level_strips_surrounding_whitespace(
     assert settings.log_level == "DEBUG"
 
 
-def test_find_repo_env_file_locates_env_file_in_an_ancestor_directory(tmp_path: Path) -> None:
-    """find_repo_env_file walks upward and finds a .env file in a parent directory."""
+def test_find_repo_env_file_locates_env_file_in_an_ancestor_directory(
+    tmp_path: Path,
+) -> None:
+    """find_repo_env_file walks upward and finds a .env in a parent dir."""
     (tmp_path / ".env").write_text("KEY=value\n")
     nested = tmp_path / "a" / "b" / "c"
     nested.mkdir(parents=True)
@@ -42,8 +49,10 @@ def test_find_repo_env_file_locates_env_file_in_an_ancestor_directory(tmp_path: 
     assert found == tmp_path / ".env"
 
 
-def test_find_repo_env_file_returns_none_when_no_env_file_exists(tmp_path: Path) -> None:
-    """find_repo_env_file returns None when no .env file exists among any ancestor.
+def test_find_repo_env_file_returns_none_when_no_env_file_exists(
+    tmp_path: Path,
+) -> None:
+    """find_repo_env_file returns None when no .env exists in any ancestor.
 
     ``tmp_path`` lives under the OS temp directory, so none of its real
     ancestors (system temp/var directories) are expected to contain a

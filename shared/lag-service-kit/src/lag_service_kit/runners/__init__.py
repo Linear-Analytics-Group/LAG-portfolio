@@ -1,4 +1,4 @@
-"""Destination-agnostic sync orchestration scaffolding shared by every LAG service."""
+"""Destination-agnostic sync orchestration scaffolding for every LAG service."""
 
 from .base import BaseSyncRunner
 

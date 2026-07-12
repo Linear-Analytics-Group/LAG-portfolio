@@ -6,10 +6,12 @@ import pandas as pd
 
 
 class JsonRecordReader:
-    """Loads tabular records from a JSON file, satisfying the ``RecordReader`` protocol.
+    """Load tabular records from a JSON file.
 
-    Expects a JSON array of flat, record-shaped objects (the ``orient="records"``
-    layout), matching how ``pandas.DataFrame.to_json(orient="records")`` writes data.
+    Satisfies the ``RecordReader`` protocol. Expects a JSON array of
+    flat, record-shaped objects (the ``orient="records"`` layout),
+    matching how ``pandas.DataFrame.to_json(orient="records")`` writes
+    data.
     """
 
     def load(self, path: Path) -> pd.DataFrame:

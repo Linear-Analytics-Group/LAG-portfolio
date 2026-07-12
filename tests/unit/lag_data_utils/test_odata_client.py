@@ -27,18 +27,25 @@ class _ConcreteODataClient(ODataClient):
 
 @pytest.fixture
 def client() -> _ConcreteODataClient:
-    """A concrete ODataClient test double with a fixed base_url and bearer token."""
+    """A concrete ODataClient test double with a fixed base_url/token."""
     return _ConcreteODataClient()
 
 
-def test_build_entity_url_follows_odata_v4_alternate_key_convention(client: _ConcreteODataClient) -> None:
+def test_build_entity_url_follows_odata_v4_alternate_key_convention(
+    client: _ConcreteODataClient,
+) -> None:
     """The alternate-key URL matches /{entity_set}({key_name}='{key_value}')."""
-    url = client._build_entity_url("lagsol_inventoryitems", "lagsol_skuid", "SKU-001")
-    assert url == f"{FAKE_BASE_URL}/lagsol_inventoryitems(lagsol_skuid='SKU-001')"
+    url = client._build_entity_url(
+        "lagsol_inventoryitems", "lagsol_skuid", "SKU-001"
+    )
+    expected = f"{FAKE_BASE_URL}/lagsol_inventoryitems(lagsol_skuid='SKU-001')"
+    assert url == expected
 
 
-def test_get_headers_includes_bearer_token_and_odata_headers(client: _ConcreteODataClient) -> None:
-    """Standard OData v4 headers are present, with the Bearer token from acquire_bearer_token()."""
+def test_get_headers_includes_bearer_token_and_odata_headers(
+    client: _ConcreteODataClient,
+) -> None:
+    """Standard OData v4 headers include the acquire_bearer_token() value."""
     headers = client._get_headers()
     assert headers["Authorization"] == "Bearer fake-bearer-token"
     assert headers["Content-Type"] == "application/json"
@@ -48,8 +55,10 @@ def test_get_headers_includes_bearer_token_and_odata_headers(client: _ConcreteOD
 
 
 @responses.activate
-def test_upsert_record_issues_a_patch_to_the_alternate_key_url(client: _ConcreteODataClient) -> None:
-    """upsert_record() PATCHes the alternate-key URL with the payload as the JSON body."""
+def test_upsert_record_issues_a_patch_to_the_alternate_key_url(
+    client: _ConcreteODataClient,
+) -> None:
+    """upsert_record() PATCHes the alternate-key URL with the JSON payload."""
     url = f"{FAKE_BASE_URL}/lagsol_inventoryitems(lagsol_skuid='SKU-001')"
     responses.add(responses.PATCH, url, status=201)
 
@@ -68,10 +77,13 @@ def test_upsert_record_issues_a_patch_to_the_alternate_key_url(client: _Concrete
 
 
 @responses.activate
-def test_upsert_record_raises_http_error_carrying_the_4xx_response(client: _ConcreteODataClient) -> None:
-    """A 4xx response surfaces as requests.HTTPError, carrying that exact response and body."""
+def test_upsert_record_raises_http_error_carrying_the_4xx_response(
+    client: _ConcreteODataClient,
+) -> None:
+    """A 4xx response surfaces as requests.HTTPError with that response."""
     url = f"{FAKE_BASE_URL}/lagsol_inventoryitems(lagsol_skuid='SKU-001')"
-    responses.add(responses.PATCH, url, status=400, json={"error": {"message": "bad request"}})
+    error_body = {"error": {"message": "bad request"}}
+    responses.add(responses.PATCH, url, status=400, json=error_body)
 
     with pytest.raises(requests.HTTPError) as exc_info:
         client.upsert_record(
@@ -82,14 +94,18 @@ def test_upsert_record_raises_http_error_carrying_the_4xx_response(client: _Conc
         )
 
     assert exc_info.value.response.status_code == 400
-    assert exc_info.value.response.json() == {"error": {"message": "bad request"}}
+    assert exc_info.value.response.json() == error_body
 
 
 @responses.activate
-def test_get_record_applies_select_fields_as_odata_select(client: _ConcreteODataClient) -> None:
-    """get_record() with select_fields sets the $select query option and returns the JSON body."""
+def test_get_record_applies_select_fields_as_odata_select(
+    client: _ConcreteODataClient,
+) -> None:
+    """get_record() with select_fields sets $select and returns the body."""
     url = f"{FAKE_BASE_URL}/lagsol_inventoryitems(lagsol_skuid='SKU-001')"
-    responses.add(responses.GET, url, json={"lagsol_name": "Widget"}, status=200)
+    responses.add(
+        responses.GET, url, json={"lagsol_name": "Widget"}, status=200
+    )
 
     record = client.get_record(
         entity_set="lagsol_inventoryitems",
@@ -99,16 +115,24 @@ def test_get_record_applies_select_fields_as_odata_select(client: _ConcreteOData
     )
 
     assert record == {"lagsol_name": "Widget"}
-    # `responses` attaches `.params` to the mocked request at runtime; requests' own
-    # PreparedRequest stub has no such attribute.
-    assert responses.calls[0].request.params["$select"] == "lagsol_name,lagsol_unitprice"  # type: ignore[attr-defined]
+    # `responses` attaches `.params` to the mocked request at runtime;
+    # requests' own PreparedRequest stub has no such attribute.
+    params = responses.calls[0].request.params  # type: ignore[attr-defined]
+    assert params["$select"] == "lagsol_name,lagsol_unitprice"
 
 
 @responses.activate
-def test_query_records_builds_all_system_query_options(client: _ConcreteODataClient) -> None:
-    """query_records() maps every argument to its OData $ query option and unwraps 'value'."""
+def test_query_records_builds_all_system_query_options(
+    client: _ConcreteODataClient,
+) -> None:
+    """query_records() maps every arg to its OData $ option, unwraps value."""
     url = f"{FAKE_BASE_URL}/lagsol_inventoryitems"
-    responses.add(responses.GET, url, json={"value": [{"lagsol_skuid": "SKU-001"}]}, status=200)
+    responses.add(
+        responses.GET,
+        url,
+        json={"value": [{"lagsol_skuid": "SKU-001"}]},
+        status=200,
+    )
 
     records = client.query_records(
         entity_set="lagsol_inventoryitems",
@@ -120,8 +144,8 @@ def test_query_records_builds_all_system_query_options(client: _ConcreteODataCli
     )
 
     assert records == [{"lagsol_skuid": "SKU-001"}]
-    # `responses` attaches `.params` to the mocked request at runtime; requests' own
-    # PreparedRequest stub has no such attribute.
+    # `responses` attaches `.params` to the mocked request at runtime;
+    # requests' own PreparedRequest stub has no such attribute.
     params = responses.calls[0].request.params  # type: ignore[attr-defined]
     assert params["$filter"] == "lagsol_unitprice lt 10"
     assert params["$select"] == "lagsol_skuid"
@@ -131,8 +155,10 @@ def test_query_records_builds_all_system_query_options(client: _ConcreteODataCli
 
 
 @responses.activate
-def test_query_records_returns_empty_list_when_no_value_key(client: _ConcreteODataClient) -> None:
-    """An empty result set (no matches) returns an empty list, not a KeyError."""
+def test_query_records_returns_empty_list_when_no_value_key(
+    client: _ConcreteODataClient,
+) -> None:
+    """An empty result set returns an empty list, not a KeyError."""
     url = f"{FAKE_BASE_URL}/lagsol_inventoryitems"
     responses.add(responses.GET, url, json={"value": []}, status=200)
 
@@ -142,7 +168,9 @@ def test_query_records_returns_empty_list_when_no_value_key(client: _ConcreteODa
 
 
 @responses.activate
-def test_delete_record_issues_a_delete_to_the_alternate_key_url(client: _ConcreteODataClient) -> None:
+def test_delete_record_issues_a_delete_to_the_alternate_key_url(
+    client: _ConcreteODataClient,
+) -> None:
     """delete_record() DELETEs the alternate-key URL."""
     url = f"{FAKE_BASE_URL}/lagsol_inventoryitems(lagsol_skuid='SKU-001')"
     responses.add(responses.DELETE, url, status=204)

@@ -145,10 +145,12 @@ class DataverseClient(ODataClient):
         """
         super().__init__()
         self._environment_url: str = environment_url.rstrip("/")
-        self._msal_app: msal.ConfidentialClientApplication = msal.ConfidentialClientApplication(
-            client_id=client_id,
-            client_credential=client_secret,
-            authority=f"https://login.microsoftonline.com/{tenant_id}",
+        self._msal_app: msal.ConfidentialClientApplication = (
+            msal.ConfidentialClientApplication(
+                client_id=client_id,
+                client_credential=client_secret,
+                authority=f"https://login.microsoftonline.com/{tenant_id}",
+            )
         )
         self._scope: List[str] = [f"{self._environment_url}/.default"]
 
@@ -157,8 +159,10 @@ class DataverseClient(ODataClient):
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_settings(cls, settings: DataverseConnectionSettings) -> "DataverseClient":
-        """Construct a ``DataverseClient`` from any object satisfying ``DataverseConnectionSettings``.
+    def from_settings(
+        cls, settings: DataverseConnectionSettings
+    ) -> "DataverseClient":
+        """Construct a ``DataverseClient`` from a settings-like object.
 
         Parameters
         ----------
@@ -227,7 +231,8 @@ class DataverseClient(ODataClient):
                 "No error description returned by Microsoft Entra ID.",
             )
             raise DataverseAuthenticationError(
-                f"Failed to acquire Bearer token from Microsoft Entra ID: {error_description}"
+                "Failed to acquire Bearer token from Microsoft Entra ID: "
+                f"{error_description}"
             )
 
         return cast(str, result["access_token"])

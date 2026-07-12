@@ -36,7 +36,10 @@ def configure_logging(log_level: str = "INFO") -> None:
         "disable_existing_loggers": False,
         "formatters": {
             "structured": {
-                "format": "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+                "format": (
+                    "%(asctime)s | %(levelname)-8s | %(name)s | "
+                    "%(message)s"
+                ),
                 "datefmt": "%Y-%m-%dT%H:%M:%S%z",
             },
         },

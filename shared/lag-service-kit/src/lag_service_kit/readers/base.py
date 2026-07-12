@@ -1,4 +1,4 @@
-"""Shared input-format abstraction: normalize any source format into a DataFrame."""
+"""Shared input-format abstraction: any source format becomes a DataFrame."""
 
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -8,7 +8,7 @@ import pandas as pd
 
 @runtime_checkable
 class RecordReader(Protocol):
-    """Structural contract for loading tabular records from a source file into a DataFrame.
+    """Structural contract for loading tabular records into a DataFrame.
 
     Any object implementing ``load`` satisfies this protocol, regardless of
     the underlying source format. Business logic downstream of a reader

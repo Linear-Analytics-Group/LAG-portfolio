@@ -6,7 +6,10 @@ import pandas as pd
 
 
 class CsvRecordReader:
-    """Loads tabular records from a CSV file, satisfying the ``RecordReader`` protocol."""
+    """Load tabular records from a CSV file.
+
+    Satisfies the ``RecordReader`` protocol.
+    """
 
     def load(self, path: Path) -> pd.DataFrame:
         """Load records from a CSV file into a DataFrame.

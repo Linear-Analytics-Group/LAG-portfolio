@@ -12,7 +12,9 @@ from pathlib import Path
 import pandas as pd
 from lag_service_kit.readers import CsvRecordReader
 
-CSV_PATH: Path = Path(__file__).parent.parent / "data" / "erp_mock_inventory_data_feed.csv"
+CSV_PATH: Path = (
+    Path(__file__).parent.parent / "data" / "erp_mock_inventory_data_feed.csv"
+)
 
 
 class CsvInventorySource:

@@ -193,6 +193,18 @@ in this repo. They are not advisory.
    precedence over the shortest path to a working single-destination
    implementation.
 
+## Style and Linting Directives
+
+* **Line Length Limit:** All lines of code, comments, and docstrings must
+  strictly stay within a maximum of 80 characters.
+* **Docstring Formatting:** Document all modules, classes, and public
+  functions using the NumPy convention. Every docstring must pass
+  `pydocstyle --convention=numpy`. Multi-line docstrings must have a
+  single-line summary under 80 characters, followed by a blank line,
+  before the detailed description.
+* **Type Safety:** Code modifications must preserve explicit typing to
+  maintain 100% compliance with `mypy --strict`.
+
 ## Dataverse Environment Reference
 
 - **Target environment:** a Microsoft Dataverse environment reachable at

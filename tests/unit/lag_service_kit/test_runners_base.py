@@ -27,13 +27,13 @@ class _FakeSettings(BaseModel):
 
 
 class _RequiredFieldProbe(BaseModel):
-    """A minimal model used only to manufacture a real ``pydantic.ValidationError``."""
+    """A minimal model used only to manufacture a real validation error."""
 
     required_field: str
 
 
 def _build_validation_error() -> ValidationError:
-    """Produce a real ``pydantic.ValidationError`` with zero environment dependency."""
+    """Produce a real ``ValidationError`` with zero environment dependency."""
     try:
         _RequiredFieldProbe()  # type: ignore[call-arg]
     except ValidationError as exc:
@@ -47,14 +47,16 @@ class _FakeClient(BaseClient):
 
 
 class _RecordingRunner(BaseSyncRunner[_FakeClient]):
-    """Records the order hooks are called in, so run()'s sequence can be asserted on."""
+    """Records the hook call order, so run()'s sequence can be asserted."""
 
     def __init__(self, fail_settings: bool = False, fail_auth: bool = False):
         self.calls: List[str] = []
         self._fail_settings = fail_settings
         self._client = _FakeClient()
         if fail_auth:
-            self._client.acquire_bearer_token = self._raise_auth_error  # type: ignore[method-assign]
+            self._client.acquire_bearer_token = (  # type: ignore[method-assign]
+                self._raise_auth_error
+            )
 
     def _raise_auth_error(self) -> str:
         raise AuthenticationError("boom")
@@ -73,19 +75,26 @@ class _RecordingRunner(BaseSyncRunner[_FakeClient]):
         self.calls.append("load_records")
         return pd.DataFrame([{"id": 1}, {"id": 2}])
 
-    def sync_records(self, client: Any, records: pd.DataFrame) -> Dict[str, int]:
+    def sync_records(
+        self, client: Any, records: pd.DataFrame
+    ) -> Dict[str, int]:
         self.calls.append("sync_records")
         return {"created": len(records), "updated": 0, "failed": 0}
 
 
 def test_run_calls_hooks_in_the_documented_order() -> None:
-    """load_settings -> build_client -> acquire_bearer_token -> load_records -> sync_records."""
+    """load_settings -> build_client -> load_records -> sync_records."""
     runner = _RecordingRunner()
 
     exit_code = runner.run()
 
     assert exit_code == 0
-    assert runner.calls == ["load_settings", "build_client", "load_records", "sync_records"]
+    assert runner.calls == [
+        "load_settings",
+        "build_client",
+        "load_records",
+        "sync_records",
+    ]
 
 
 def test_run_returns_zero_when_nothing_failed() -> None:
@@ -93,8 +102,8 @@ def test_run_returns_zero_when_nothing_failed() -> None:
     assert _RecordingRunner().run() == 0
 
 
-def test_run_reports_failure_via_exit_code_even_when_most_records_succeeded() -> None:
-    """run()'s exit code reflects a nonzero failed count, independent of how sync_records got there.
+def test_run_reports_failure_even_when_most_records_succeeded() -> None:
+    """run()'s exit code reflects a nonzero failed count either way.
 
     This deliberately does *not* test whether sync_records() kept
     processing records after a failure — that's
@@ -105,14 +114,16 @@ def test_run_reports_failure_via_exit_code_even_when_most_records_succeeded() ->
     """
 
     class _MostlySucceededRunner(_RecordingRunner):
-        def sync_records(self, client: Any, records: pd.DataFrame) -> Dict[str, int]:
+        def sync_records(
+            self, client: Any, records: pd.DataFrame
+        ) -> Dict[str, int]:
             return {"created": 5, "updated": 0, "failed": 1}
 
     assert _MostlySucceededRunner().run() == 1
 
 
 def test_run_returns_one_and_short_circuits_on_configuration_error() -> None:
-    """A ValidationError from load_settings() is caught, logged, and stops before build_client()."""
+    """A ValidationError from load_settings() stops before build_client()."""
     runner = _RecordingRunner(fail_settings=True)
 
     exit_code = runner.run()
@@ -122,7 +133,7 @@ def test_run_returns_one_and_short_circuits_on_configuration_error() -> None:
 
 
 def test_run_returns_one_and_short_circuits_on_authentication_error() -> None:
-    """An AuthenticationError from acquire_bearer_token() is caught and stops before load_records()."""
+    """An AuthenticationError from the client stops before load_records()."""
     runner = _RecordingRunner(fail_auth=True)
 
     exit_code = runner.run()

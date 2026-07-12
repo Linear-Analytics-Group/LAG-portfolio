@@ -56,18 +56,18 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
     @property
     @abstractmethod
     def entity_set(self) -> str:
-        """Pluralized logical name of the destination's inventory entity collection."""
+        """Pluralized name of the destination's inventory entity collection."""
         ...
 
     @property
     @abstractmethod
     def alternate_key_field(self) -> str:
-        """Schema name of the destination field holding the SKU alternate key."""
+        """Schema name of the destination's SKU alternate-key field."""
         ...
 
     @abstractmethod
     def build_payload(self, row: Any) -> Dict[str, Any]:
-        """Map one deduplicated inventory row to the destination's own field names.
+        """Map one deduplicated row to the destination's own field names.
 
         Parameters
         ----------
@@ -84,8 +84,10 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         """
         ...
 
-    def sync_records(self, client: ODataClient, records: pd.DataFrame) -> Dict[str, int]:
-        """Upsert each inventory record into the destination via idempotent PATCH.
+    def sync_records(
+        self, client: ODataClient, records: pd.DataFrame
+    ) -> Dict[str, int]:
+        """Upsert each record into the destination via an idempotent PATCH.
 
         Parameters
         ----------
@@ -114,7 +116,9 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
                     payload=self.build_payload(row),
                 )
             except requests.HTTPError as exc:
-                logger.error("FAILED %s=%s: %s", self.dedupe_key, key_value, exc)
+                logger.error(
+                    "FAILED %s=%s: %s", self.dedupe_key, key_value, exc
+                )
                 result["failed"] += 1
                 continue
 

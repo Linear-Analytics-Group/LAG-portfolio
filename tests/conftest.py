@@ -54,7 +54,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
 
 @pytest.fixture
 def dataverse_client(monkeypatch: pytest.MonkeyPatch) -> DataverseClient:
-    """Build a ``DataverseClient`` wired to a fake environment, with MSAL stubbed out.
+    """Build a ``DataverseClient`` wired to a fake environment.
 
     ``msal.ConfidentialClientApplication.__init__`` performs a real network
     call (OIDC tenant discovery) before any token is ever requested, so
@@ -72,23 +72,31 @@ def dataverse_client(monkeypatch: pytest.MonkeyPatch) -> DataverseClient:
     Returns
     -------
     DataverseClient
-        A client whose ``base_url`` is ``FAKE_ENVIRONMENT_URL + "/api/data/v9.2"``
-        and whose real, unmodified ``acquire_bearer_token()`` returns
-        ``FAKE_BEARER_TOKEN`` by exercising the real cache-miss code path
-        against the fake MSAL application.
+        A client whose ``base_url`` is
+        ``FAKE_ENVIRONMENT_URL + "/api/data/v9.2"`` and whose real,
+        unmodified ``acquire_bearer_token()`` returns
+        ``FAKE_BEARER_TOKEN`` by exercising the real cache-miss code
+        path against the fake MSAL application.
     """
 
     class _FakeConfidentialClientApplication:
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
-        def acquire_token_silent(self, *args: object, **kwargs: object) -> None:
+        def acquire_token_silent(
+            self, *args: object, **kwargs: object
+        ) -> None:
             return None
 
-        def acquire_token_for_client(self, *args: object, **kwargs: object) -> dict:  # type: ignore[type-arg]
+        def acquire_token_for_client(
+            self, *args: object, **kwargs: object
+        ) -> dict:  # type: ignore[type-arg]
             return {"access_token": FAKE_BEARER_TOKEN}
 
-    monkeypatch.setattr("msal.ConfidentialClientApplication", _FakeConfidentialClientApplication)
+    monkeypatch.setattr(
+        "msal.ConfidentialClientApplication",
+        _FakeConfidentialClientApplication,
+    )
     return DataverseClient(
         tenant_id="fake-tenant-id",
         client_id="fake-client-id",
@@ -99,7 +107,9 @@ def dataverse_client(monkeypatch: pytest.MonkeyPatch) -> DataverseClient:
 
 @pytest.fixture
 def raw_inventory_records() -> pd.DataFrame:
-    """Build a small, deliberately-duplicated raw inventory feed for dedup/sync tests.
+    """Build a small, deliberately-duplicated raw inventory feed.
+
+    Used by dedup/sync tests.
 
     Returns
     -------
@@ -113,15 +123,21 @@ def raw_inventory_records() -> pd.DataFrame:
         [
             {"sku_id": "SKU-001", "item_name": "Widget", "unit_price": 9.99},
             {"sku_id": "SKU-002", "item_name": "Gadget", "unit_price": 19.99},
-            {"sku_id": "SKU-002", "item_name": "Gadget (updated)", "unit_price": 24.99},
+            {
+                "sku_id": "SKU-002",
+                "item_name": "Gadget (updated)",
+                "unit_price": 24.99,
+            },
             {"sku_id": "SKU-003", "item_name": "Gizmo", "unit_price": 4.50},
         ]
     )
 
 
 @pytest.fixture
-def csv_source(tmp_path: Path, raw_inventory_records: pd.DataFrame) -> CsvInventorySource:
-    """Build a ``CsvInventorySource`` backed by a temp file of ``raw_inventory_records``.
+def csv_source(
+    tmp_path: Path, raw_inventory_records: pd.DataFrame
+) -> CsvInventorySource:
+    """Build a ``CsvInventorySource`` backed by a temp file.
 
     Parameters
     ----------
@@ -141,8 +157,10 @@ def csv_source(tmp_path: Path, raw_inventory_records: pd.DataFrame) -> CsvInvent
 
 
 @pytest.fixture
-def json_source(tmp_path: Path, raw_inventory_records: pd.DataFrame) -> JsonInventorySource:
-    """Build a ``JsonInventorySource`` backed by a temp file of ``raw_inventory_records``.
+def json_source(
+    tmp_path: Path, raw_inventory_records: pd.DataFrame
+) -> JsonInventorySource:
+    """Build a ``JsonInventorySource`` backed by a temp file.
 
     Parameters
     ----------
@@ -165,7 +183,7 @@ def json_source(tmp_path: Path, raw_inventory_records: pd.DataFrame) -> JsonInve
 def dataverse_runner_factory(
     monkeypatch: pytest.MonkeyPatch, dataverse_client: DataverseClient
 ) -> Callable[..., DataverseInventorySyncRunner]:
-    """Return a factory building a ``DataverseInventorySyncRunner`` wired to a fake environment.
+    """Return a factory building a runner wired to a fake environment.
 
     Bypasses real settings loading and real client construction entirely
     (``load_settings``/``build_client`` are monkeypatched on the instance),
@@ -189,9 +207,17 @@ def dataverse_runner_factory(
     from types import SimpleNamespace
 
     def _build(source: object) -> DataverseInventorySyncRunner:
-        runner = DataverseInventorySyncRunner(source=source)  # type: ignore[arg-type]
-        monkeypatch.setattr(runner, "load_settings", lambda: SimpleNamespace(log_level="DEBUG"))
-        monkeypatch.setattr(runner, "build_client", lambda settings: dataverse_client)
+        runner = DataverseInventorySyncRunner(
+            source=source  # type: ignore[arg-type]
+        )
+        monkeypatch.setattr(
+            runner,
+            "load_settings",
+            lambda: SimpleNamespace(log_level="DEBUG"),
+        )
+        monkeypatch.setattr(
+            runner, "build_client", lambda settings: dataverse_client
+        )
         return runner
 
     return _build

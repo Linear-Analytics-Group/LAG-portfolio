@@ -1,4 +1,7 @@
-"""Unit tests for lag_service_kit.dataverse_settings.DataverseConnectionSettings."""
+"""Unit tests for lag_service_kit.dataverse_settings.
+
+Covers DataverseConnectionSettings.
+"""
 
 import pytest
 from lag_service_kit.dataverse_settings import DataverseConnectionSettings
@@ -8,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_valid_values_are_accepted(clean_env: pytest.MonkeyPatch) -> None:
-    """All four required fields, when provided, are accepted as-is (aside from normalization)."""
+    """All four required fields, when provided, are accepted as-is."""
     settings = DataverseConnectionSettings(
         azure_tenant_id="tenant-id",
         azure_client_id="client-id",
@@ -19,8 +22,10 @@ def test_valid_values_are_accepted(clean_env: pytest.MonkeyPatch) -> None:
     assert settings.dataverse_url == "https://org.crm.dynamics.com"
 
 
-def test_missing_required_fields_raise_validation_error(clean_env: pytest.MonkeyPatch) -> None:
-    """Every one of the four fields is required — omitting any raises ValidationError."""
+def test_missing_required_fields_raise_validation_error(
+    clean_env: pytest.MonkeyPatch,
+) -> None:
+    """Every one of the four fields is required to avoid ValidationError."""
     with pytest.raises(ValidationError) as exc_info:
         DataverseConnectionSettings()  # type: ignore[call-arg]
 
@@ -33,8 +38,10 @@ def test_missing_required_fields_raise_validation_error(clean_env: pytest.Monkey
     }
 
 
-def test_empty_string_fields_raise_validation_error(clean_env: pytest.MonkeyPatch) -> None:
-    """An empty string does not satisfy min_length=1 — it's treated the same as missing."""
+def test_empty_string_fields_raise_validation_error(
+    clean_env: pytest.MonkeyPatch,
+) -> None:
+    """An empty string fails min_length=1, same as a missing field."""
     with pytest.raises(ValidationError):
         DataverseConnectionSettings(
             azure_tenant_id="",
@@ -44,8 +51,10 @@ def test_empty_string_fields_raise_validation_error(clean_env: pytest.MonkeyPatc
         )
 
 
-def test_whitespace_is_stripped_from_all_four_fields(clean_env: pytest.MonkeyPatch) -> None:
-    """Leading/trailing whitespace from a raw environment value is stripped before validation."""
+def test_whitespace_is_stripped_from_all_four_fields(
+    clean_env: pytest.MonkeyPatch,
+) -> None:
+    """Leading/trailing whitespace is stripped before validation."""
     settings = DataverseConnectionSettings(
         azure_tenant_id="  tenant-id  ",
         azure_client_id="  client-id  ",
@@ -58,8 +67,10 @@ def test_whitespace_is_stripped_from_all_four_fields(clean_env: pytest.MonkeyPat
     assert settings.dataverse_url == "https://org.crm.dynamics.com"
 
 
-def test_trailing_slash_is_stripped_from_dataverse_url(clean_env: pytest.MonkeyPatch) -> None:
-    """A trailing slash on dataverse_url is removed so downstream URL-joining never double-slashes."""
+def test_trailing_slash_is_stripped_from_dataverse_url(
+    clean_env: pytest.MonkeyPatch,
+) -> None:
+    """A trailing slash on dataverse_url never double-slashes downstream."""
     settings = DataverseConnectionSettings(
         azure_tenant_id="tenant-id",
         azure_client_id="client-id",

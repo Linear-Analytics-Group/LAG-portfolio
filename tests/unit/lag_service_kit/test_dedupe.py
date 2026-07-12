@@ -37,11 +37,15 @@ def test_records_with_no_duplicates_are_unchanged() -> None:
 
 
 def test_other_columns_are_preserved_alongside_the_winning_row() -> None:
-    """Deduping by one key column keeps every other column's value for the winning row."""
+    """Deduping by one key column keeps every other column's winning value."""
     records = pd.DataFrame(
         [
             {"sku_id": "SKU-001", "item_name": "Widget", "unit_price": 9.99},
-            {"sku_id": "SKU-001", "item_name": "Widget (updated)", "unit_price": 12.50},
+            {
+                "sku_id": "SKU-001",
+                "item_name": "Widget (updated)",
+                "unit_price": 12.50,
+            },
         ]
     )
 

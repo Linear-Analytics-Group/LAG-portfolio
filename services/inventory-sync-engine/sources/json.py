@@ -12,7 +12,9 @@ from pathlib import Path
 import pandas as pd
 from lag_service_kit.readers import JsonRecordReader
 
-JSON_PATH: Path = Path(__file__).parent.parent / "data" / "erp_mock_inventory_data_feed.json"
+JSON_PATH: Path = (
+    Path(__file__).parent.parent / "data" / "erp_mock_inventory_data_feed.json"
+)
 
 
 class JsonInventorySource:

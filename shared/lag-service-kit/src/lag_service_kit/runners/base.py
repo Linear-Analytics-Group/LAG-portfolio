@@ -32,8 +32,9 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
     type this run's destination uses (bound to
     ``lag_data_utils.clients.base.BaseClient``). A protocol-specific
     subclass fixes ``ClientT`` to the narrowest client type its
-    destinations all share — e.g. ``BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient])``
-    — so that every subclass in the hierarchy agrees on one client type
+    destinations all share — e.g.
+    ``BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient])`` — so
+    that every subclass in the hierarchy agrees on one client type
     for :meth:`build_client` and :meth:`sync_records`, rather than each
     narrowing it independently and violating the Liskov substitution
     principle. Domain logic that doesn't depend on ``ClientT`` (e.g. a
@@ -94,7 +95,9 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
         ...
 
     @abstractmethod
-    def sync_records(self, client: ClientT, records: pd.DataFrame) -> Dict[str, int]:
+    def sync_records(
+        self, client: ClientT, records: pd.DataFrame
+    ) -> Dict[str, int]:
         """Write each record to the destination system.
 
         Parameters

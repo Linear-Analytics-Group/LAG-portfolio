@@ -1,1 +1,4 @@
-"""Unit tests for shared/lag-data-utils: BaseClient, ODataClient, DataverseClient."""
+"""Unit tests for shared/lag-data-utils.
+
+Covers BaseClient, ODataClient, DataverseClient.
+"""

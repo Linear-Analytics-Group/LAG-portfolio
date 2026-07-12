@@ -31,8 +31,8 @@ class InventoryDomainMixin:
     deduplicating by SKU. A destination leaf class combines this mixin
     with a protocol-specific base (e.g.
     ``runners.odata.BaseODataInventorySyncRunner``) to get both
-    concerns without either one duplicating the other's logic —
-    e.g. ``class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncRunner)``.
+    concerns without either one duplicating the other's logic — see
+    ``DataverseInventorySyncRunner`` for a concrete example.
 
     Notes
     -----

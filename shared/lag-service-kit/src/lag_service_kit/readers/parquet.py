@@ -6,7 +6,10 @@ import pandas as pd
 
 
 class ParquetRecordReader:
-    """Loads tabular records from a Parquet file, satisfying the ``RecordReader`` protocol."""
+    """Load tabular records from a Parquet file.
+
+    Satisfies the ``RecordReader`` protocol.
+    """
 
     def load(self, path: Path) -> pd.DataFrame:
         """Load records from a Parquet file into a DataFrame.
