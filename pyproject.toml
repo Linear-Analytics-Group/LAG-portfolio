@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = [
+    "shared/lag-data-utils/src",
+    "shared/lag-service-kit/src",
+    "services/inventory-sync-engine",
+]
+markers = [
+    "acceptance: black-box tests proving a business requirement from README.md holds",
+    "integration: cross-component tests exercising real classes across a mocked network boundary",
+    "unit: isolated tests of a single class or function",
+]
+addopts = "--strict-markers"
