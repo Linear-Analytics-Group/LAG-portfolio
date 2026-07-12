@@ -5,10 +5,10 @@ from typing import Any, Dict, List, Optional, cast
 
 import requests
 
-from .base import BaseClient
+from .http import BaseHttpClient
 
 
-class ODataClient(BaseClient):
+class ODataClient(BaseHttpClient):
     """Abstract OData v4 client with standardized HTTP operations.
 
     ``ODataClient`` is the second layer of the connector hierarchy,
@@ -43,9 +43,9 @@ class ODataClient(BaseClient):
     Parameters
     ----------
     None
-        Initialization creates an internal ``requests.Session`` for
-        HTTP connection pooling and keep-alive reuse across multiple
-        API calls within the same connector instance lifetime.
+        Construction (the pooled ``requests.Session`` and default
+        request timeout) is inherited unchanged from
+        :class:`~lag_data_utils.clients.http.BaseHttpClient`.
 
     Notes
     -----
@@ -76,15 +76,6 @@ class ODataClient(BaseClient):
     ...         # MSAL client-credentials flow against Microsoft Entra ID
     ...         ...
     """
-
-    def __init__(self) -> None:
-        """Initialize the underlying HTTP session for this connector instance.
-
-        Returns
-        -------
-        None
-        """
-        self._session: requests.Session = requests.Session()
 
     # ------------------------------------------------------------------
     # Abstract interface — must be implemented by concrete subclasses
@@ -224,7 +215,9 @@ class ODataClient(BaseClient):
         """
         url = self._build_entity_url(entity_set, alternate_key_name, key_value)
         headers = self._get_headers()
-        response = self._session.patch(url, json=payload, headers=headers)
+        response = self._session.patch(
+            url, json=payload, headers=headers, timeout=self._timeout
+        )
         response.raise_for_status()
         return response
 
@@ -284,7 +277,9 @@ class ODataClient(BaseClient):
         if select_fields:
             params["$select"] = ",".join(select_fields)
         headers = self._get_headers()
-        response = self._session.get(url, params=params, headers=headers)
+        response = self._session.get(
+            url, params=params, headers=headers, timeout=self._timeout
+        )
         response.raise_for_status()
         return cast(Dict[str, Any], response.json())
 
@@ -363,7 +358,9 @@ class ODataClient(BaseClient):
         if order_by:
             params["$orderby"] = order_by
         headers = self._get_headers()
-        response = self._session.get(url, params=params, headers=headers)
+        response = self._session.get(
+            url, params=params, headers=headers, timeout=self._timeout
+        )
         response.raise_for_status()
         return cast(List[Dict[str, Any]], response.json().get("value", []))
 
@@ -412,6 +409,8 @@ class ODataClient(BaseClient):
         ... )
         """
         url = self._build_entity_url(entity_set, alternate_key_name, key_value)
-        response = self._session.delete(url, headers=self._get_headers())
+        response = self._session.delete(
+            url, headers=self._get_headers(), timeout=self._timeout
+        )
         response.raise_for_status()
         return response

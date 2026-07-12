@@ -1,10 +1,20 @@
 """Concrete Microsoft Dataverse OData v4 connector implementation."""
 
-from typing import Any, Dict, List, Optional, Protocol, cast, runtime_checkable
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    cast,
+    runtime_checkable,
+)
 
 import msal
 
 from .base import AuthenticationError
+from .http import DEFAULT_TIMEOUT
 from .odata import ODataClient
 
 
@@ -121,6 +131,7 @@ class DataverseClient(ODataClient):
         client_id: str,
         client_secret: str,
         environment_url: str,
+        timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
     ) -> None:
         """Initialize the Dataverse connector and its MSAL confidential client.
 
@@ -138,12 +149,16 @@ class DataverseClient(ODataClient):
         environment_url : str
             The root URL of the target Dataverse environment. A trailing
             slash is stripped automatically.
+        timeout : Tuple[float, float]
+            ``(connect_timeout, read_timeout)`` in seconds for every
+            request this client issues. Defaults to
+            :data:`~lag_data_utils.clients.http.DEFAULT_TIMEOUT`.
 
         Returns
         -------
         None
         """
-        super().__init__()
+        super().__init__(timeout=timeout)
         self._environment_url: str = environment_url.rstrip("/")
         self._msal_app: msal.ConfidentialClientApplication = (
             msal.ConfidentialClientApplication(

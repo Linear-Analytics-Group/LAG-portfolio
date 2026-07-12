@@ -7,9 +7,17 @@ Hierarchy
 ---------
 BaseClient
     Protocol-agnostic root. Enforces the authentication contract
-    (``acquire_bearer_token``) across all connector families.
+    (``acquire_bearer_token``) across all connector families. Makes no
+    assumptions about the transport (HTTP, gRPC, ODBC, ...).
 
-ODataClient(BaseClient)
+BaseHttpClient(BaseClient)
+    Generic HTTP-transport base. Owns a pooled ``requests.Session`` and
+    default request timeouts — the parts of "being an HTTP client" that
+    have nothing to do with any particular wire protocol on top. Any
+    future HTTP-based connector family (plain REST, SOAP-over-HTTP, ...)
+    subclasses this directly, alongside ``ODataClient``.
+
+ODataClient(BaseHttpClient)
     Abstract OData v4 adapter. Provides concrete, standard-compliant
     HTTP operations (upsert, get, query, delete) reusable across any
     OData v4-compliant destination (Dataverse, SAP S/4HANA, etc.).
@@ -21,10 +29,11 @@ DataverseClient(ODataClient)
 
 Note
 ----
-``BaseClient`` and ``ODataClient`` are abstract and cannot be instantiated
-directly (each declares abstractmethods); use them only for type
-annotations or as a base to subclass from. Only ``DataverseClient`` (or
-another concrete leaf connector) may be instantiated.
+``BaseClient``, ``BaseHttpClient``, and ``ODataClient`` are abstract and
+cannot be instantiated directly (each declares abstractmethods); use them
+only for type annotations or as a base to subclass from. Only
+``DataverseClient`` (or another concrete leaf connector) may be
+instantiated.
 
 Usage
 -----
@@ -44,6 +53,13 @@ To build a new OData v4 connector (e.g., for SAP S/4HANA), subclass
 >>> from lag_data_utils.clients import ODataClient
 >>> class SAPClient(ODataClient): ...
 
+To build a new *non*-OData HTTP connector, subclass ``BaseHttpClient``
+directly — it still gets the pooled session and default timeouts, with
+none of ``ODataClient``'s OData-specific query/URL conventions:
+
+>>> from lag_data_utils.clients import BaseHttpClient
+>>> class SomeRestClient(BaseHttpClient): ...
+
 For broad dependency injection or type annotations that span all connector
 families, use ``BaseClient``:
 
@@ -52,12 +68,14 @@ families, use ``BaseClient``:
 """
 
 from .base import AuthenticationError, BaseClient
+from .dataverse import DataverseAuthenticationError, DataverseClient
+from .http import BaseHttpClient
 from .odata import ODataClient
-from .dataverse import DataverseClient, DataverseAuthenticationError
 
 __all__ = [
     "AuthenticationError",
     "BaseClient",
+    "BaseHttpClient",
     "ODataClient",
     "DataverseClient",
     "DataverseAuthenticationError",
