@@ -11,6 +11,7 @@ import re
 from typing import Callable
 
 import pytest
+import requests
 import responses
 from lag_data_utils.clients.dataverse import (
     DataverseAuthenticationError,
@@ -107,3 +108,26 @@ def test_one_failed_record_does_not_stop_the_rest_from_syncing(
     assert exit_code == 1
     assert "2 created, 0 updated, 1 failed (of 3 records)" in output
     assert "FAILED sku_id=SKU-002" in output
+
+
+@pytest.mark.acceptance
+@responses.activate
+def test_a_dropped_connection_on_one_record_does_not_stop_the_rest(
+    dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
+    csv_source: CsvInventorySource,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A network failure on one record is counted like an HTTP failure."""
+    responses.add(
+        responses.PATCH,
+        re.compile(r".*/lagsol_inventoryitems\(lagsol_skuid='SKU-002'\)$"),
+        body=requests.ConnectionError("Connection reset by peer"),
+    )
+    responses.add(responses.PATCH, UPSERT_URL_PATTERN, status=201)
+
+    exit_code = dataverse_runner_factory(csv_source).run()
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "2 created, 0 updated, 1 failed (of 3 records)" in output
+    assert "FAILED sku_id=SKU-002: ConnectionError" in output

@@ -122,28 +122,44 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
         -------
         int
             Process exit code: ``0`` if every record synced without error,
-            ``1`` if configuration was invalid, authentication failed, or
-            any record failed to sync.
+            ``1`` if configuration was invalid, authentication failed, the
+            source feed could not be found, any record failed to sync, or
+            an unexpected error occurred.
+
+        Notes
+        -----
+        Every step is wrapped in one ``try`` block, with ``except``
+        clauses ordered from most to least specific: a validated
+        configuration problem, a rejected credential, and a missing
+        source feed are all known, expected operational failures, each
+        logged with a short, targeted message. Anything else is, by
+        definition, unexpected — it is logged with its full traceback
+        via :meth:`~logging.Logger.exception` rather than silently
+        swallowed or left to crash the process uncaught.
         """
         configure_logging()
 
         try:
             settings = self.load_settings()
+            configure_logging(settings.log_level)
+
+            client = self.build_client(settings)
+            client.acquire_bearer_token()
+
+            records = self.load_records()
+            result = self.sync_records(client, records)
         except ValidationError as exc:
             logger.error("Configuration error: %s", exc)
             return 1
-
-        configure_logging(settings.log_level)
-
-        client = self.build_client(settings)
-        try:
-            client.acquire_bearer_token()
         except AuthenticationError as exc:
             logger.error("Authentication error: %s", exc)
             return 1
-
-        records = self.load_records()
-        result = self.sync_records(client, records)
+        except FileNotFoundError as exc:
+            logger.error("Source error: %s", exc)
+            return 1
+        except Exception:
+            logger.exception("Unexpected error during sync.")
+            return 1
 
         logger.info(
             "Sync complete: %d created, %d updated, %d failed (of %d records).",

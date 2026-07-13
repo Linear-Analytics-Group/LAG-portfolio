@@ -140,3 +140,35 @@ def test_run_returns_one_and_short_circuits_on_authentication_error() -> None:
 
     assert exit_code == 1
     assert runner.calls == ["load_settings", "build_client"]
+
+
+def test_run_reports_a_source_error_when_load_records_raises(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A missing source feed is reported distinctly, not as a generic bug."""
+
+    class _MissingSourceRunner(_RecordingRunner):
+        def load_records(self) -> pd.DataFrame:
+            self.calls.append("load_records")
+            raise FileNotFoundError("mock_feed.csv not found")
+
+    exit_code = _MissingSourceRunner().run()
+
+    assert exit_code == 1
+    assert "Source error" in capsys.readouterr().out
+
+
+def test_run_reports_unexpected_errors_instead_of_crashing(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bug in a hook is caught, logged with a traceback, and reported."""
+
+    class _BuggyRunner(_RecordingRunner):
+        def build_client(self, settings: Any) -> _FakeClient:
+            self.calls.append("build_client")
+            raise RuntimeError("not a business failure, a bug")
+
+    exit_code = _BuggyRunner().run()
+
+    assert exit_code == 1
+    assert "Unexpected error during sync." in capsys.readouterr().out

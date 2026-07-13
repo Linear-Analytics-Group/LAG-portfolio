@@ -102,7 +102,19 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         Dict[str, int]
             Counts under the keys ``created``, ``updated``, and ``failed``,
             classified from each record's HTTP response status code
-            (201 Created, 204 No Content) or a raised ``requests.HTTPError``.
+            (201 Created, 204 No Content) or one of the exceptions listed
+            below.
+
+        Notes
+        -----
+        Catches exactly ``requests.HTTPError`` (a rejected response),
+        ``requests.ConnectionError`` (the connection itself failed), and
+        ``requests.Timeout`` (no response within the configured timeout)
+        — the categories of a genuinely retriable, per-record transport
+        failure. Any other exception (e.g., a malformed URL from a code
+        defect) is treated as a bug, not a sync failure, and propagates
+        uncaught rather than being silently absorbed into ``failed`` for
+        every remaining record.
         """
         result: Dict[str, int] = {"created": 0, "updated": 0, "failed": 0}
 
@@ -115,9 +127,17 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
                     key_value=key_value,
                     payload=self.build_payload(row),
                 )
-            except requests.HTTPError as exc:
+            except (
+                requests.HTTPError,
+                requests.ConnectionError,
+                requests.Timeout,
+            ) as exc:
                 logger.error(
-                    "FAILED %s=%s: %s", self.dedupe_key, key_value, exc
+                    "FAILED %s=%s: %s: %s",
+                    self.dedupe_key,
+                    key_value,
+                    type(exc).__name__,
+                    exc,
                 )
                 result["failed"] += 1
                 continue
