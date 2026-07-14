@@ -349,6 +349,34 @@ identical deduplicated records.
 change either way — both only ever depend on the resulting `DataFrame`,
 never the source that produced it.
 
+### Constructor Injection vs. Environment Bloat
+
+During the design of the deduplication pipeline, we weighed two
+approaches for handling variable business keys (e.g., `sku_id`):
+driving the key dynamically via `.env` (e.g., `DEDUPE_KEY=item_sku`)
+vs. injecting the dependency/key via Python constructors.
+
+We chose **Constructor Injection** at the service layer for three
+critical enterprise reasons:
+
+1. **Separation of Concerns (Domain vs. Environment):** Environmental
+   variables (`.env`) should govern deployment-specific secrets,
+   endpoints, and log levels. A deduplication key is a fundamental
+   business domain rule bound to the database schema. Exposing it to
+   `.env` would allow operational environments to break schema
+   mappings without a formal code review or deployment pipeline.
+2. **Preventing Framework Pollution:** Forcing the generic
+   `BaseSyncRunner` in the scaffolding kit to store and expose
+   stateful configurations violates the Dependency Inversion
+   Principle. By keeping our scaffolding stateless and injecting
+   dependencies through the service constructors, we keep our core
+   orchestration engine incredibly lightweight and testable.
+3. **Flawless Unit Testing:** Constructor injection guarantees that we
+   can instantiate the sync runners in a local test suite and inject
+   mock schemas, mock configurations, and lightweight in-memory
+   DataFrames instantly, without mocking global environment variables
+   or loading `.env` files.
+
 ## Execution flow
 
 ```mermaid

@@ -19,9 +19,16 @@ from typing import Any, Dict
 
 from config import InventorySyncSettings
 from lag_data_utils.clients.dataverse import DataverseClient
+from sources import InventorySource
 
-from .base import InventoryDomainMixin
+from .base import DEDUPE_KEY, InventoryDomainMixin
 from .odata import BaseODataInventorySyncRunner
+
+#: This portfolio's shipped Dataverse schema — a different customer's
+#: environment overrides these at construction time (see README.md's
+#: "Constructor Injection vs. Environment Bloat").
+DEFAULT_ENTITY_SET: str = "lagsol_inventoryitems"
+DEFAULT_ALTERNATE_KEY_FIELD: str = "lagsol_skuid"
 
 
 class DataverseInventorySyncRunner(
@@ -38,7 +45,7 @@ class DataverseInventorySyncRunner(
     ``sources.CsvInventorySource``.
 
     A future destination that also speaks OData v4 (e.g. SAP S/4HANA
-    Cloud, SharePoint Online) is added by writing a sibling module —
+    Cloud, SharePoint Online) is added through a sibling module —
     ``runners/sap.py`` — with a leaf class combining the same two
     bases (``InventoryDomainMixin``, ``BaseODataInventorySyncRunner``),
     supplying only its own settings, client, entity set, alternate key,
@@ -50,6 +57,53 @@ class DataverseInventorySyncRunner(
     way, never duplicated per protocol.
     """
 
+    def __init__(
+        self,
+        source: InventorySource,
+        dedupe_key: str = DEDUPE_KEY,
+        entity_set: str = DEFAULT_ENTITY_SET,
+        alternate_key_field: str = DEFAULT_ALTERNATE_KEY_FIELD,
+    ) -> None:
+        """Bind this run to a source feed and its Dataverse schema names.
+
+        Parameters
+        ----------
+        source : InventorySource
+            The feed to read raw inventory records from.
+        dedupe_key : str
+            The source column uniquely identifying an inventory item.
+            Defaults to :data:`~runners.base.DEDUPE_KEY`.
+        entity_set : str
+            The pluralized logical name of the Dataverse inventory
+            entity collection. Defaults to :data:`DEFAULT_ENTITY_SET`.
+        alternate_key_field : str
+            The schema name of the Dataverse alternate key field.
+            Defaults to :data:`DEFAULT_ALTERNATE_KEY_FIELD`.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        ``dedupe_key`` and ``alternate_key_field`` are independent
+        parameters with independent defaults, not one derived from the
+        other. They're governed by two unrelated naming authorities:
+        ``dedupe_key`` names whichever column a customer's raw source
+        feed uses as its record's unique identifier, while
+        ``alternate_key_field`` names the field used as the unique
+        identifier in the destination — which, for Dataverse, the
+        platform *requires* to carry a solution publisher prefix
+        (``lagsol_`` here — see
+        ``platform/power-platform/.../lagsol_InventoryItem/Entity.xml``).
+        These two names structurally cannot coincide in a real
+        deployment, so defaulting one from the other would be wrong,
+        not merely redundant.
+        """
+        super().__init__(source=source, dedupe_key=dedupe_key)
+        self._entity_set = entity_set
+        self._alternate_key_field = alternate_key_field
+
     @property
     def entity_set(self) -> str:
         """Pluralized logical name of the Dataverse inventory entity collection.
@@ -57,9 +111,10 @@ class DataverseInventorySyncRunner(
         Returns
         -------
         str
-            ``"lagsol_inventoryitems"``.
+            The value supplied at construction time (defaults to
+            ``"lagsol_inventoryitems"``).
         """
-        return "lagsol_inventoryitems"
+        return self._entity_set
 
     @property
     def alternate_key_field(self) -> str:
@@ -68,9 +123,10 @@ class DataverseInventorySyncRunner(
         Returns
         -------
         str
-            ``"lagsol_skuid"``.
+            The value supplied at construction time (defaults to
+            ``"lagsol_skuid"``).
         """
-        return "lagsol_skuid"
+        return self._alternate_key_field
 
     def load_settings(self) -> InventorySyncSettings:
         """Load Entra ID and Dataverse settings from the environment/`.env`.

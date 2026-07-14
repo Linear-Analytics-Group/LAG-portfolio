@@ -43,10 +43,10 @@ class InventoryDomainMixin:
     protocol-specific base supplies those.
     """
 
-    dedupe_key: str = DEDUPE_KEY
-
-    def __init__(self, source: InventorySource) -> None:
-        """Bind this run to a source feed.
+    def __init__(
+        self, source: InventorySource, dedupe_key: str = DEDUPE_KEY
+    ) -> None:
+        """Bind this run to a source feed and its business-key column.
 
         Parameters
         ----------
@@ -55,8 +55,28 @@ class InventoryDomainMixin:
             instance of ``sources.CsvInventorySource``. Any object
             satisfying the ``InventorySource`` protocol works, regardless
             of this runner's destination or write protocol.
+        dedupe_key : str
+            The column name in ``source``'s records that uniquely
+            identifies an inventory item — ``"sku_id"`` for the shipped
+            mock feed. A customer whose source feed names this column
+            differently overrides it here at construction time rather
+            than forking this mixin; see README.md's "Constructor
+            Injection vs. Environment Bloat" for why this is a
+            constructor argument and not an environment variable.
+
+        Notes
+        -----
+        Calls ``super().__init__()`` even though this mixin has no
+        explicit base of its own, because it doesn't know in advance
+        what it will be mixed with — a destination leaf class combines
+        it with a protocol-specific base via multiple inheritance (see
+        ``DataverseInventorySyncRunner``). Skipping this call would
+        break that base's own ``__init__`` (if it ever gains one) for
+        every destination built this way, with no error to signal it.
         """
+        super().__init__()
         self.source = source
+        self.dedupe_key = dedupe_key
 
     def load_records(self) -> pd.DataFrame:
         """Read this run's source feed and collapse duplicate SKU rows.
