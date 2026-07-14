@@ -11,11 +11,13 @@ BaseClient
     assumptions about the transport (HTTP, gRPC, ODBC, ...).
 
 BaseHttpClient(BaseClient)
-    Generic HTTP-transport base. Owns a pooled ``requests.Session`` and
-    default request timeouts — the parts of "being an HTTP client" that
-    have nothing to do with any particular wire protocol on top. Any
-    future HTTP-based connector family (plain REST, SOAP-over-HTTP, ...)
-    subclasses this directly, alongside ``ODataClient``.
+    Generic HTTP-transport base. Owns a pooled ``requests.Session``,
+    default request timeouts, and automatic retry-with-backoff for
+    transient failures (429/502/503/504, honoring ``Retry-After``) —
+    the parts of "being an HTTP client" that have nothing to do with
+    any particular wire protocol on top. Any future HTTP-based
+    connector family (plain REST, SOAP-over-HTTP, ...) subclasses this
+    directly, alongside ``ODataClient``.
 
 ODataClient(BaseHttpClient)
     Abstract OData v4 adapter. Provides concrete, standard-compliant

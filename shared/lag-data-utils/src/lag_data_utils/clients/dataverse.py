@@ -12,9 +12,10 @@ from typing import (
 )
 
 import msal
+from urllib3.util.retry import Retry
 
 from .base import AuthenticationError
-from .http import DEFAULT_TIMEOUT
+from .http import DEFAULT_RETRY, DEFAULT_TIMEOUT
 from .odata import ODataClient
 
 
@@ -132,6 +133,7 @@ class DataverseClient(ODataClient):
         client_secret: str,
         environment_url: str,
         timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
+        retry: Retry = DEFAULT_RETRY,
     ) -> None:
         """Initialize the Dataverse connector and its MSAL confidential client.
 
@@ -153,12 +155,16 @@ class DataverseClient(ODataClient):
             ``(connect_timeout, read_timeout)`` in seconds for every
             request this client issues. Defaults to
             :data:`~lag_data_utils.clients.http.DEFAULT_TIMEOUT`.
+        retry : Retry
+            Retry policy for transient failures on every request this
+            client issues. Defaults to
+            :data:`~lag_data_utils.clients.http.DEFAULT_RETRY`.
 
         Returns
         -------
         None
         """
-        super().__init__(timeout=timeout)
+        super().__init__(timeout=timeout, retry=retry)
         self._environment_url: str = environment_url.rstrip("/")
         self._msal_app: msal.ConfidentialClientApplication = (
             msal.ConfidentialClientApplication(
