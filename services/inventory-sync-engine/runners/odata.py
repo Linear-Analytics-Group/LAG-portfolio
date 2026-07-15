@@ -11,12 +11,15 @@ share write-loop code that doesn't actually apply to both of them.
 
 import logging
 from abc import abstractmethod
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict
 
 import pandas as pd
 import requests
 from lag_data_utils.clients.odata import ODataClient
 from lag_service_kit.runners import BaseSyncRunner
+
+from defaults import DEFAULT_MAX_WORKERS
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -53,6 +56,35 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
 
     dedupe_key: str
 
+    def __init__(
+        self, max_workers: int = DEFAULT_MAX_WORKERS, **kwargs: Any
+    ) -> None:
+        """Set this run's upsert concurrency.
+
+        Parameters
+        ----------
+        max_workers : int
+            Worker threads used to upsert records concurrently in
+            :meth:`sync_records`. Defaults to :data:`DEFAULT_MAX_WORKERS`.
+        **kwargs : Any
+            Forwarded, unexamined, to ``super().__init__()``.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This is the last class in the domain/protocol mixin chain with
+        constructor parameters of its own — ``BaseSyncRunner`` defines
+        none — so nothing further needs ``**kwargs`` forwarded to it.
+        Still calls ``super().__init__()`` (with no arguments) rather
+        than skip it, for the same cooperative-multiple-inheritance
+        reason ``InventoryDomainMixin.__init__`` does.
+        """
+        super().__init__()
+        self._max_workers = max_workers
+
     @property
     @abstractmethod
     def entity_set(self) -> str:
@@ -84,10 +116,67 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         """
         ...
 
+    def _upsert_one(self, client: ODataClient, row: Any) -> str:
+        """Upsert a single record, classifying the outcome as a string.
+
+        Parameters
+        ----------
+        client : ODataClient
+            An authenticated OData v4 client for the target destination.
+        row : Any
+            A single ``NamedTuple`` row from :meth:`sync_records`'s
+            ``records``.
+
+        Returns
+        -------
+        str
+            ``"created"``, ``"updated"``, or ``"failed"``.
+
+        Notes
+        -----
+        Runs inside a worker thread (see :meth:`sync_records`) and
+        deliberately returns a plain value rather than mutating any
+        shared state — the caller aggregates results back on the main
+        thread, so no lock is needed here and one record's failure can
+        never corrupt another's count.
+
+        Catches exactly ``requests.HTTPError`` (a rejected response),
+        ``requests.ConnectionError`` (the connection itself failed), and
+        ``requests.Timeout`` (no response within the configured timeout)
+        — the categories of a genuinely retriable, per-record transport
+        failure. Any other exception (e.g., a malformed URL from a code
+        defect) is treated as a bug, not a sync failure, and propagates
+        uncaught rather than being silently absorbed into ``failed`` for
+        every remaining record.
+        """
+        key_value = getattr(row, self.dedupe_key)
+        try:
+            response = client.upsert_record(
+                entity_set=self.entity_set,
+                alternate_key_name=self.alternate_key_field,
+                key_value=key_value,
+                payload=self.build_payload(row),
+            )
+        except (
+            requests.HTTPError,
+            requests.ConnectionError,
+            requests.Timeout,
+        ) as exc:
+            logger.error(
+                "FAILED %s=%s: %s: %s",
+                self.dedupe_key,
+                key_value,
+                type(exc).__name__,
+                exc,
+            )
+            return "failed"
+
+        return "created" if response.status_code == 201 else "updated"
+
     def sync_records(
         self, client: ODataClient, records: pd.DataFrame
     ) -> Dict[str, int]:
-        """Upsert each record into the destination via an idempotent PATCH.
+        """Upsert every record concurrently via an idempotent PATCH.
 
         Parameters
         ----------
@@ -100,51 +189,29 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         Returns
         -------
         Dict[str, int]
-            Counts under the keys ``created``, ``updated``, and ``failed``,
-            classified from each record's HTTP response status code
-            (201 Created, 204 No Content) or one of the exceptions listed
-            below.
+            Counts under the keys ``created``, ``updated``, and ``failed``.
 
         Notes
         -----
-        Catches exactly ``requests.HTTPError`` (a rejected response),
-        ``requests.ConnectionError`` (the connection itself failed), and
-        ``requests.Timeout`` (no response within the configured timeout)
-        — the categories of a genuinely retriable, per-record transport
-        failure. Any other exception (e.g., a malformed URL from a code
-        defect) is treated as a bug, not a sync failure, and propagates
-        uncaught rather than being silently absorbed into ``failed`` for
-        every remaining record.
+        Dispatches up to :attr:`_max_workers` upserts at once via
+        ``concurrent.futures.ThreadPoolExecutor``. This is an I/O-bound
+        workload — each upsert spends almost all its time waiting on
+        the network, not computing — so threads give real parallelism
+        despite the GIL, without the much larger rewrite an async HTTP
+        stack would require. Each worker classifies its own outcome
+        (see :meth:`_upsert_one`) and returns a plain string; only the
+        main thread ever increments ``result``, so no lock is needed
+        and the per-record failure isolation this class has always
+        guaranteed holds unchanged under concurrency.
         """
         result: Dict[str, int] = {"created": 0, "updated": 0, "failed": 0}
 
-        for row in records.itertuples(index=False):
-            key_value = getattr(row, self.dedupe_key)
-            try:
-                response = client.upsert_record(
-                    entity_set=self.entity_set,
-                    alternate_key_name=self.alternate_key_field,
-                    key_value=key_value,
-                    payload=self.build_payload(row),
-                )
-            except (
-                requests.HTTPError,
-                requests.ConnectionError,
-                requests.Timeout,
-            ) as exc:
-                logger.error(
-                    "FAILED %s=%s: %s: %s",
-                    self.dedupe_key,
-                    key_value,
-                    type(exc).__name__,
-                    exc,
-                )
-                result["failed"] += 1
-                continue
-
-            if response.status_code == 201:
-                result["created"] += 1
-            else:
-                result["updated"] += 1
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+            futures = [
+                executor.submit(self._upsert_one, client, row)
+                for row in records.itertuples(index=False)
+            ]
+            for future in as_completed(futures):
+                result[future.result()] += 1
 
         return result

@@ -18,10 +18,11 @@ or anything else.
 from typing import Any, Dict
 
 from config import InventorySyncSettings
+from defaults import DEDUPE_KEY, DEFAULT_MAX_WORKERS
 from lag_data_utils.clients.dataverse import DataverseClient
 from sources import InventorySource
 
-from .base import DEDUPE_KEY, InventoryDomainMixin
+from .base import InventoryDomainMixin
 from .odata import BaseODataInventorySyncRunner
 
 #: This portfolio's shipped Dataverse schema — a different customer's
@@ -63,6 +64,7 @@ class DataverseInventorySyncRunner(
         dedupe_key: str = DEDUPE_KEY,
         entity_set: str = DEFAULT_ENTITY_SET,
         alternate_key_field: str = DEFAULT_ALTERNATE_KEY_FIELD,
+        max_workers: int = DEFAULT_MAX_WORKERS,
     ) -> None:
         """Bind this run to a source feed and its Dataverse schema names.
 
@@ -72,13 +74,19 @@ class DataverseInventorySyncRunner(
             The feed to read raw inventory records from.
         dedupe_key : str
             The source column uniquely identifying an inventory item.
-            Defaults to :data:`~runners.base.DEDUPE_KEY`.
+            Defaults to :data:`~defaults.DEDUPE_KEY`.
         entity_set : str
             The pluralized logical name of the Dataverse inventory
             entity collection. Defaults to :data:`DEFAULT_ENTITY_SET`.
         alternate_key_field : str
             The schema name of the Dataverse alternate key field.
             Defaults to :data:`DEFAULT_ALTERNATE_KEY_FIELD`.
+        max_workers : int
+            Worker threads used to upsert records concurrently. Forwarded
+            to :meth:`~runners.odata.BaseODataInventorySyncRunner.__init__`
+            and, via :meth:`build_client`, used to size the destination
+            client's HTTP connection pool to match. Defaults to
+            :data:`~defaults.DEFAULT_MAX_WORKERS`.
 
         Returns
         -------
@@ -100,7 +108,9 @@ class DataverseInventorySyncRunner(
         deployment, so defaulting one from the other would be wrong,
         not merely redundant.
         """
-        super().__init__(source=source, dedupe_key=dedupe_key)
+        super().__init__(
+            source=source, dedupe_key=dedupe_key, max_workers=max_workers
+        )
         self._entity_set = entity_set
         self._alternate_key_field = alternate_key_field
 
@@ -154,9 +164,28 @@ class DataverseInventorySyncRunner(
             A client that authenticates against the configured Dataverse
             environment once
             :meth:`~lag_data_utils.clients.base.BaseClient.acquire_bearer_token`
-            is called.
+            is called. Its HTTP connection pool is sized to twice
+            :attr:`_max_workers`, so ``sync_records``'s worker threads
+            never queue for a pooled connection.
+
+        Notes
+        -----
+        Without this, the pool would stay at
+        :data:`~lag_data_utils.clients.http.DEFAULT_POOL_MAXSIZE`
+        regardless of how many worker threads ``sync_records`` actually
+        dispatches, silently capping real concurrency below
+        ``max_workers`` once the thread count exceeds the pool size.
+        The 2x multiplier — not a bare 1:1 match — keeps headroom above
+        the strict worker count: a connection a retry is holding open
+        (see :data:`~lag_data_utils.clients.http.DEFAULT_RETRY`) doesn't
+        block a different worker from acquiring one of its own, and it
+        matches the ratio :data:`~defaults.DEFAULT_MAX_WORKERS` (10)
+        already ships against
+        :data:`~lag_data_utils.clients.http.DEFAULT_POOL_MAXSIZE` (20).
         """
-        return DataverseClient.from_settings(settings)
+        return DataverseClient.from_settings(
+            settings, pool_maxsize=self._max_workers * 2
+        )
 
     def build_payload(self, row: Any) -> Dict[str, Any]:
         """Map a generic inventory row to Dataverse's ``lagsol_`` field schema.

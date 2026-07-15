@@ -11,15 +11,15 @@ regardless of write protocol.
 """
 
 import logging
+from typing import Any
 
 import pandas as pd
 from lag_service_kit.dedupe import dedupe_last_seen
 
+from defaults import DEDUPE_KEY as DEDUPE_KEY
 from sources import InventorySource
 
 logger: logging.Logger = logging.getLogger(__name__)
-
-DEDUPE_KEY: str = "sku_id"
 
 
 class InventoryDomainMixin:
@@ -44,7 +44,10 @@ class InventoryDomainMixin:
     """
 
     def __init__(
-        self, source: InventorySource, dedupe_key: str = DEDUPE_KEY
+        self,
+        source: InventorySource,
+        dedupe_key: str = DEDUPE_KEY,
+        **kwargs: Any,
     ) -> None:
         """Bind this run to a source feed and its business-key column.
 
@@ -63,18 +66,25 @@ class InventoryDomainMixin:
             than forking this mixin; see README.md's "Constructor
             Injection vs. Environment Bloat" for why this is a
             constructor argument and not an environment variable.
+        **kwargs : Any
+            Forwarded, unexamined, to ``super().__init__()`` — see Notes.
 
         Notes
         -----
-        Calls ``super().__init__()`` even though this mixin has no
-        explicit base of its own, because it doesn't know in advance
+        Calls ``super().__init__(**kwargs)`` even though this mixin has
+        no explicit base of its own, because it doesn't know in advance
         what it will be mixed with — a destination leaf class combines
         it with a protocol-specific base via multiple inheritance (see
         ``DataverseInventorySyncRunner``). Skipping this call would
-        break that base's own ``__init__`` (if it ever gains one) for
-        every destination built this way, with no error to signal it.
+        break that base's own ``__init__`` for every destination built
+        this way, with no error to signal it. Accepting and forwarding
+        ``**kwargs`` (rather than calling ``super().__init__()`` with no
+        arguments) lets a leaf class configure *any* base in the chain
+        — e.g. ``BaseODataInventorySyncRunner``'s ``max_workers`` —
+        through one constructor call, without this domain-only mixin
+        needing to know that parameter's name.
         """
-        super().__init__()
+        super().__init__(**kwargs)
         self.source = source
         self.dedupe_key = dedupe_key
 

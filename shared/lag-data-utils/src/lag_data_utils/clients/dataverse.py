@@ -15,7 +15,7 @@ import msal
 from urllib3.util.retry import Retry
 
 from .base import AuthenticationError
-from .http import DEFAULT_RETRY, DEFAULT_TIMEOUT
+from .http import DEFAULT_POOL_MAXSIZE, DEFAULT_RETRY, DEFAULT_TIMEOUT
 from .odata import ODataClient
 
 
@@ -134,6 +134,7 @@ class DataverseClient(ODataClient):
         environment_url: str,
         timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
         retry: Retry = DEFAULT_RETRY,
+        pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
     ) -> None:
         """Initialize the Dataverse connector and its MSAL confidential client.
 
@@ -159,12 +160,18 @@ class DataverseClient(ODataClient):
             Retry policy for transient failures on every request this
             client issues. Defaults to
             :data:`~lag_data_utils.clients.http.DEFAULT_RETRY`.
+        pool_maxsize : int
+            Concurrent connections held open for this client. A caller
+            issuing more concurrent requests than this against one
+            client instance silently caps its own concurrency at this
+            number. Defaults to
+            :data:`~lag_data_utils.clients.http.DEFAULT_POOL_MAXSIZE`.
 
         Returns
         -------
         None
         """
-        super().__init__(timeout=timeout, retry=retry)
+        super().__init__(timeout=timeout, retry=retry, pool_maxsize=pool_maxsize)
         self._environment_url: str = environment_url.rstrip("/")
         self._msal_app: msal.ConfidentialClientApplication = (
             msal.ConfidentialClientApplication(
@@ -181,7 +188,11 @@ class DataverseClient(ODataClient):
 
     @classmethod
     def from_settings(
-        cls, settings: DataverseConnectionSettings
+        cls,
+        settings: DataverseConnectionSettings,
+        timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
+        retry: Retry = DEFAULT_RETRY,
+        pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
     ) -> "DataverseClient":
         """Construct a ``DataverseClient`` from a settings-like object.
 
@@ -193,18 +204,41 @@ class DataverseClient(ODataClient):
             a ``lag_service_kit.dataverse_settings.DataverseConnectionSettings``
             instance). This client has no dependency on whatever
             configuration framework produced ``settings``.
+        timeout : Tuple[float, float]
+            Forwarded to :meth:`__init__`. Defaults to
+            :data:`~lag_data_utils.clients.http.DEFAULT_TIMEOUT`.
+        retry : Retry
+            Forwarded to :meth:`__init__`. Defaults to
+            :data:`~lag_data_utils.clients.http.DEFAULT_RETRY`.
+        pool_maxsize : int
+            Forwarded to :meth:`__init__`. Defaults to
+            :data:`~lag_data_utils.clients.http.DEFAULT_POOL_MAXSIZE`.
 
         Returns
         -------
         DataverseClient
             A client authenticated against the Dataverse environment
             identified by ``settings.dataverse_url``.
+
+        Notes
+        -----
+        Earlier versions of this method silently ignored any
+        ``timeout``/``retry`` override, since it never accepted or
+        forwarded them at all — meaning a caller could override these
+        on :meth:`__init__` directly, but never through this alternate
+        constructor, which is the one production actually uses (see
+        ``DataverseInventorySyncRunner.build_client()``). Fixed here so
+        overrides reach the client regardless of which constructor
+        built it.
         """
         return cls(
             tenant_id=settings.azure_tenant_id,
             client_id=settings.azure_client_id,
             client_secret=settings.azure_client_secret,
             environment_url=settings.dataverse_url,
+            timeout=timeout,
+            retry=retry,
+            pool_maxsize=pool_maxsize,
         )
 
     # ------------------------------------------------------------------

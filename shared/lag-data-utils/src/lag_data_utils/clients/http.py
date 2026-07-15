@@ -29,6 +29,19 @@ DEFAULT_RETRY: Retry = Retry(
     respect_retry_after_header=True,
 )
 
+#: Concurrent connections held open per host. Generous on its own
+#: terms for any HTTP-based connector, independent of any particular
+#: caller's concurrency setting — this package cannot know that a
+#: service built on top uses, say, 10 worker threads (that would mean
+#: this transport-layer package depending on an orchestration-layer
+#: one, inverting the dependency direction this repo enforces). A
+#: caller running more concurrent requests than this should pass a
+#: larger ``pool_maxsize`` explicitly — see
+#: ``DataverseInventorySyncRunner.build_client()`` for how this
+#: service derives its client's pool size from its own concurrency
+#: setting, rather than relying on this default to happen to match.
+DEFAULT_POOL_MAXSIZE: int = 20
+
 
 class BaseHttpClient(BaseClient):
     """HTTP-transport base for any REST-ish connector (OData, plain REST, ...).
@@ -46,6 +59,7 @@ class BaseHttpClient(BaseClient):
         self,
         timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
         retry: Retry = DEFAULT_RETRY,
+        pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
     ) -> None:
         """Initialize the underlying HTTP session, timeout, and retry policy.
 
@@ -59,6 +73,13 @@ class BaseHttpClient(BaseClient):
             Retry policy mounted on this client's session for both
             ``http://`` and ``https://`` requests. Defaults to
             :data:`DEFAULT_RETRY`.
+        pool_maxsize : int
+            Concurrent connections held open per host. If a caller
+            issues more concurrent requests than this against one
+            client instance, the excess simply queue for a free pooled
+            connection — silently capping effective concurrency below
+            whatever the caller configured, with no error raised.
+            Defaults to :data:`DEFAULT_POOL_MAXSIZE`.
 
         Returns
         -------
@@ -66,6 +87,10 @@ class BaseHttpClient(BaseClient):
         """
         self._session: requests.Session = requests.Session()
         self._timeout: Tuple[float, float] = timeout
-        adapter = HTTPAdapter(max_retries=retry)
+        adapter = HTTPAdapter(
+            max_retries=retry,
+            pool_maxsize=pool_maxsize,
+            pool_connections=pool_maxsize,
+        )
         self._session.mount("https://", adapter)
         self._session.mount("http://", adapter)
