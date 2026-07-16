@@ -644,10 +644,18 @@ This repository holds itself to a strict bar (see `CLAUDE.md`'s
 Architectural Directives): every module under `shared/` and
 `services/inventory-sync-engine/` — `config.py`, `dataverse_sync_runner.py`,
 `runners/`, and `sources/` — passes both mypy and pydocstyle scans with zero
-findings.
+findings. `generate_mock_data.py` is the one deliberate exception — a
+standalone dev/test data generator excluded via `[tool.mypy]`'s
+`exclude` in `pyproject.toml`, not part of the delivered service.
+
+`pyproject.toml`'s `[tool.mypy]` section carries `--strict`,
+`--ignore-missing-imports`, the `pydantic.mypy` plugin (needed for
+`pydantic-settings`' `BaseSettings` field-sourcing semantics), and the
+`generate_mock_data.py` exclusion, so running plain `mypy` picks up the
+same configuration as CI:
 
 ```bash
-mypy --strict --ignore-missing-imports <files>
+mypy <files>
 pydocstyle --convention=numpy <files>
 ```
 

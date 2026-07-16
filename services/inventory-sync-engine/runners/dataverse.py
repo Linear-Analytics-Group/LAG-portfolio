@@ -158,7 +158,7 @@ class DataverseInventorySyncRunner(
             addressing the target Dataverse environment.
         """
         # Required fields are sourced from the environment/`.env` file.
-        return InventorySyncSettings()  # type: ignore[call-arg]
+        return InventorySyncSettings()
 
     def build_client(self, settings: InventorySyncSettings) -> DataverseClient:
         """Construct a ``DataverseClient`` from validated settings.

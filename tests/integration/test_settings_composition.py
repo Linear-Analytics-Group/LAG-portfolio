@@ -28,7 +28,7 @@ def test_settings_compose_dataverse_and_service_fields(
     _set_required_env(monkeypatch)
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
-    settings = InventorySyncSettings()  # type: ignore[call-arg]
+    settings = InventorySyncSettings()
 
     assert settings.azure_tenant_id == "test-tenant-id"
     assert settings.azure_client_id == "test-client-id"
@@ -46,7 +46,7 @@ def test_log_level_defaults_to_info_when_unset(
     _set_required_env(monkeypatch)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
 
-    settings = InventorySyncSettings()  # type: ignore[call-arg]
+    settings = InventorySyncSettings()
 
     assert settings.log_level == "INFO"
 
@@ -62,6 +62,6 @@ def test_settings_satisfy_lag_data_utils_protocol_structurally(
     """
     _set_required_env(monkeypatch)
 
-    settings = InventorySyncSettings()  # type: ignore[call-arg]
+    settings = InventorySyncSettings()
 
     assert isinstance(settings, ClientSideProtocol)

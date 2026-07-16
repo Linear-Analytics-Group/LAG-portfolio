@@ -27,7 +27,7 @@ def test_missing_required_fields_raise_validation_error(
 ) -> None:
     """Every one of the four fields is required to avoid ValidationError."""
     with pytest.raises(ValidationError) as exc_info:
-        DataverseConnectionSettings()  # type: ignore[call-arg]
+        DataverseConnectionSettings()
 
     missing_fields = {error["loc"][0] for error in exc_info.value.errors()}
     assert missing_fields == {
