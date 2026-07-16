@@ -396,20 +396,20 @@ OData v4 defines a `$batch` endpoint where multiple operations are packed into a
 single `multipart/mixed` HTTP POST request. While this reduces TCP/TLS 
 connection handshake overhead from $N$ to roughly $N/1000$ (matching the 
 Dataverse batch limit), it introduces notable operational trade-offs:
-*   **The Atomic Rollback Conflict:** OData batching supports *Changesets*—where 
+* **The Atomic Rollback Conflict:** OData batching supports *Changesets*—where 
 all operations in the group are treated as a single atomic transaction. If a 
 single payload in a batch of 1,000 fails validation, the entire batch rolls 
 back. This directly violates our primary acceptance criterion- that one failed 
 record must never corrupt or roll back successful writes for adjacent, 
 unrelated records.
-*   **The Standalone Parsing Overhead:** Bypassing the rollback trap requires 
+* **The Standalone Parsing Overhead:** Bypassing the rollback trap requires 
 configuring each batch operation as an independent, non-changeset execution 
 block. However, Python’s `requests` library lacks built-in OData batch 
 parser mechanisms. Implementing this would require writing, testing, and 
 maintaining a custom parser to build, serialize, and deserialize complex 
 multipart MIME streams inside the `ODataClient` class, dramatically increasing 
 the risk of transport-layer regression.
-*   **API Rate-Limit Parity:** Contrary to common assumptions, Microsoft 
+* **API Rate-Limit Parity:** Contrary to common assumptions, Microsoft 
 Dataverse service protection and daily entitlement quotas count individual 
 operations *inside* a batch request against your user allocations. While 
 `$batch` reduces network round-trip latency, it does not bypass the rate-limit 
@@ -422,17 +422,37 @@ Instead of grouping requests on the server, we implemented a controlled thread
 execution pool using a thread-safe connection session manager. This choice 
 unlocked several key advantages:
 
-*   **Granular Isolation & Fault Tolerance:** Each API write is processed on its 
+* **Granular Isolation & Fault Tolerance:** Each API write is processed on its 
 own thread- a failed record is caught, logged, and isolated instantly. 
 The sync engine continues executing the rest of the queue unimpeded.
-*   **Native Connection Pooling:** By pairing multi-threading with a thread-safe 
+* **Native Connection Pooling:** By pairing multi-threading with a thread-safe 
 connection adapter, we reuse TCP handshakes at the transport layer, achieving 
 nearly identical latency optimization to batching without the structural 
 complexity of MIME parsing.
-*   **Dynamic Concurrency Throttling:** Client-side concurrency allows us to 
+* **Dynamic Concurrency Throttling:** Client-side concurrency allows us to 
 easily listen to Dataverse's `Retry-After` HTTP headers. If we hit service 
 protection limits, we can dynamically back off or queue-throttle specific 
 worker threads rather than stalling an entire 1,000-record batch.
+
+### Runtime Checkable Protocols
+
+We use a `@runtime_checkable` Protocol (ChunkedSource) to dynamically detect 
+whether an incoming data source supports chunked streaming.
+
+* **Interface Segregation & LSP:** Not all source formats can genuinely stream. 
+Forcing a dummy streaming method onto every reader violates the Liskov 
+Substitution Principle and the Interface Segregation Principle. A separate 
+Protocol segregates this optional capability cleanly- abstaining from forcing
+clients into implementing methods they cannot support.
+* **Type-Safe Narrowing:** It allows Mypy to narrow types inside conditional 
+blocks. This eliminates the need for unsafe `ignore` workarounds that may hide
+true defects.
+* **CPU vs. I/O Bottlenecks:** While structural `isinstance` checks carry a 
+minor runtime CPU overhead, this check occurs exactly once at the start of the 
+sync run—not inside the inner loop processing thousands of records. In a 
+network-heavy, I/O-bound pipeline, a microsecond-level CPU check is 
+mathematically irrelevant compared to milliseconds of network latency, adding
+little-to-no cost to implementing this clean and predictable design.
 
 ## Execution flow
 
