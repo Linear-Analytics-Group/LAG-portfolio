@@ -3,6 +3,8 @@
 import pytest
 import responses
 from lag_data_utils.clients.http import (
+    DEFAULT_POOL_CONNECTIONS,
+    DEFAULT_POOL_MAXSIZE,
     DEFAULT_RETRY,
     DEFAULT_TIMEOUT,
     BaseHttpClient,
@@ -32,6 +34,44 @@ def test_custom_timeout_override_is_respected() -> None:
     """A client built with a custom timeout stores it, not the default."""
     client = _ConcreteHttpClient(timeout=(1.0, 2.0))
     assert client._timeout == (1.0, 2.0)
+
+
+def test_default_pool_connections_is_independent_of_pool_maxsize() -> None:
+    """pool_connections defaults to its own constant, not pool_maxsize.
+
+    Guards against the two being conflated again: DEFAULT_POOL_MAXSIZE
+    (20) and DEFAULT_POOL_CONNECTIONS (10) are deliberately different
+    values, so a regression that re-derives one from the other would
+    fail this assertion rather than passing by coincidence.
+    """
+    client = _ConcreteHttpClient()
+    adapter = client._session.get_adapter("https://example.com")
+
+    pool_connections = adapter._pool_connections  # type: ignore[attr-defined]
+    assert pool_connections == DEFAULT_POOL_CONNECTIONS
+    assert DEFAULT_POOL_CONNECTIONS != DEFAULT_POOL_MAXSIZE
+
+
+def test_custom_pool_connections_does_not_affect_pool_maxsize() -> None:
+    """Overriding pool_connections alone leaves pool_maxsize untouched."""
+    client = _ConcreteHttpClient(pool_connections=3)
+    adapter = client._session.get_adapter("https://example.com")
+
+    pool_connections = adapter._pool_connections  # type: ignore[attr-defined]
+    pool_maxsize = adapter._pool_maxsize  # type: ignore[attr-defined]
+    assert pool_connections == 3
+    assert pool_maxsize == DEFAULT_POOL_MAXSIZE
+
+
+def test_custom_pool_maxsize_does_not_affect_pool_connections() -> None:
+    """Overriding pool_maxsize alone leaves pool_connections untouched."""
+    client = _ConcreteHttpClient(pool_maxsize=50)
+    adapter = client._session.get_adapter("https://example.com")
+
+    pool_maxsize = adapter._pool_maxsize  # type: ignore[attr-defined]
+    pool_connections = adapter._pool_connections  # type: ignore[attr-defined]
+    assert pool_maxsize == 50
+    assert pool_connections == DEFAULT_POOL_CONNECTIONS
 
 
 def test_default_retry_policy_is_mounted_on_both_schemes() -> None:

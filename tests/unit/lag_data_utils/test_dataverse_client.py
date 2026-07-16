@@ -6,7 +6,9 @@ constructing a client — the real class performs a live network call
 requested.
 """
 
-from typing import Any, Dict, Optional
+import threading
+import time
+from typing import Any, Dict, List, Optional
 
 import pytest
 from lag_data_utils.clients.dataverse import (
@@ -35,6 +37,27 @@ class _FakeMsalApp:
         self, scopes
     ):
         self.for_client_call_count += 1
+        return self.for_client_result
+
+
+class _RacingFakeMsalApp(_FakeMsalApp):
+    """Simulates a slow, cache-populating token refresh under concurrency.
+
+    Real MSAL caches a token after a successful ``acquire_token_for_client``
+    call, so a subsequent ``acquire_token_silent`` call then returns it.
+    This fake reproduces that (unlike the plain ``_FakeMsalApp``, whose
+    ``silent_result`` never changes) and adds an artificial delay to
+    widen the race window, so a concurrency test can prove later
+    callers observe the freshly cached token instead of also
+    refreshing.
+    """
+
+    def acquire_token_for_client(  # type: ignore[no-untyped-def]
+        self, scopes
+    ):
+        time.sleep(0.05)
+        self.for_client_call_count += 1
+        self.silent_result = self.for_client_result
         return self.for_client_result
 
 
@@ -89,6 +112,52 @@ def test_acquire_bearer_token_fetches_fresh_token_on_cache_miss(
 
     assert token == "fresh-token"
     assert fake_msal_app.for_client_call_count == 1
+
+
+def test_concurrent_cache_miss_triggers_exactly_one_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """N threads racing an empty cache trigger a single token refresh.
+
+    Without a thread lock in ``acquire_bearer_token``, every
+    thread that observes the initial cache miss would independently
+    call ``acquire_token_for_client`` — a thundering herd against Entra
+    ID. A ``threading.Barrier`` forces every thread to reach the method
+    at the same instant, reliably reproducing the race rather than
+    depending on timing luck.
+    """
+    fake_app = _RacingFakeMsalApp()
+    fake_app.silent_result = None
+    fake_app.for_client_result = {"access_token": "fresh-token"}
+    monkeypatch.setattr(
+        "msal.ConfidentialClientApplication", lambda *a, **k: fake_app
+    )
+    client = DataverseClient(
+        tenant_id="fake-tenant-id",
+        client_id="fake-client-id",
+        client_secret="fake-client-secret",
+        environment_url="https://fake-org.crm.dynamics.com",
+    )
+
+    thread_count = 10
+    barrier = threading.Barrier(thread_count)
+    results: List[Optional[str]] = [None] * thread_count
+
+    def worker(index: int) -> None:
+        barrier.wait()
+        results[index] = client.acquire_bearer_token()
+
+    threads = [
+        threading.Thread(target=worker, args=(i,))
+        for i in range(thread_count)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert fake_app.for_client_call_count == 1
+    assert results == ["fresh-token"] * thread_count
 
 
 def test_acquire_bearer_token_raises_with_entra_error_description_on_rejection(

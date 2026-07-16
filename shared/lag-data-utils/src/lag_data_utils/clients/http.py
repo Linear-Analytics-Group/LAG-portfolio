@@ -42,6 +42,15 @@ DEFAULT_RETRY: Retry = Retry(
 #: setting, rather than relying on this default to happen to match.
 DEFAULT_POOL_MAXSIZE: int = 20
 
+#: Distinct per-host connection pools to cache — an LRU keyed by host,
+#: not a concurrency knob. Unrelated to ``DEFAULT_POOL_MAXSIZE``: every
+#: client in this codebase talks to exactly one host per instance (see
+#: ``DataverseClient``'s single ``environment_url``), so this never
+#: needs to scale with worker count — it stays at requests' own
+#: long-standing default regardless of how large ``pool_maxsize`` gets.
+#: Set in place here to support multi-host future implementations
+DEFAULT_POOL_CONNECTIONS: int = 10
+
 
 class BaseHttpClient(BaseClient):
     """HTTP-transport base for any REST-ish connector (OData, plain REST, ...).
@@ -60,6 +69,7 @@ class BaseHttpClient(BaseClient):
         timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
         retry: Retry = DEFAULT_RETRY,
         pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
+        pool_connections: int = DEFAULT_POOL_CONNECTIONS,
     ) -> None:
         """Initialize the underlying HTTP session, timeout, and retry policy.
 
@@ -80,6 +90,10 @@ class BaseHttpClient(BaseClient):
             connection — silently capping effective concurrency below
             whatever the caller configured, with no error raised.
             Defaults to :data:`DEFAULT_POOL_MAXSIZE`.
+        pool_connections : int
+            Distinct per-host connection pools to cache — an LRU keyed
+            by host, unrelated to ``pool_maxsize``. Defaults to
+            :data:`DEFAULT_POOL_CONNECTIONS`.
 
         Returns
         -------
@@ -90,7 +104,7 @@ class BaseHttpClient(BaseClient):
         adapter = HTTPAdapter(
             max_retries=retry,
             pool_maxsize=pool_maxsize,
-            pool_connections=pool_maxsize,
+            pool_connections=pool_connections,
         )
         self._session.mount("https://", adapter)
         self._session.mount("http://", adapter)

@@ -1,5 +1,6 @@
 """Concrete Microsoft Dataverse OData v4 connector implementation."""
 
+import threading
 from typing import (
     Any,
     Dict,
@@ -15,7 +16,12 @@ import msal
 from urllib3.util.retry import Retry
 
 from .base import AuthenticationError
-from .http import DEFAULT_POOL_MAXSIZE, DEFAULT_RETRY, DEFAULT_TIMEOUT
+from .http import (
+    DEFAULT_POOL_CONNECTIONS,
+    DEFAULT_POOL_MAXSIZE,
+    DEFAULT_RETRY,
+    DEFAULT_TIMEOUT,
+)
 from .odata import ODataClient
 
 
@@ -135,6 +141,7 @@ class DataverseClient(ODataClient):
         timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
         retry: Retry = DEFAULT_RETRY,
         pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
+        pool_connections: int = DEFAULT_POOL_CONNECTIONS,
     ) -> None:
         """Initialize the Dataverse connector and its MSAL confidential client.
 
@@ -166,12 +173,23 @@ class DataverseClient(ODataClient):
             client instance silently caps its own concurrency at this
             number. Defaults to
             :data:`~lag_data_utils.clients.http.DEFAULT_POOL_MAXSIZE`.
+        pool_connections : int
+            Distinct per-host connection pools cached by this client.
+            Unrelated to ``pool_maxsize``: this environment is always a
+            single host, so it never needs to scale with concurrency.
+            Defaults to
+            :data:`~lag_data_utils.clients.http.DEFAULT_POOL_CONNECTIONS`.
 
         Returns
         -------
         None
         """
-        super().__init__(timeout=timeout, retry=retry, pool_maxsize=pool_maxsize)
+        super().__init__(
+            timeout=timeout,
+            retry=retry,
+            pool_maxsize=pool_maxsize,
+            pool_connections=pool_connections,
+        )
         self._environment_url: str = environment_url.rstrip("/")
         self._msal_app: msal.ConfidentialClientApplication = (
             msal.ConfidentialClientApplication(
@@ -181,6 +199,7 @@ class DataverseClient(ODataClient):
             )
         )
         self._scope: List[str] = [f"{self._environment_url}/.default"]
+        self._token_lock: threading.Lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Alternate constructor
@@ -193,6 +212,7 @@ class DataverseClient(ODataClient):
         timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
         retry: Retry = DEFAULT_RETRY,
         pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
+        pool_connections: int = DEFAULT_POOL_CONNECTIONS,
     ) -> "DataverseClient":
         """Construct a ``DataverseClient`` from a settings-like object.
 
@@ -213,6 +233,9 @@ class DataverseClient(ODataClient):
         pool_maxsize : int
             Forwarded to :meth:`__init__`. Defaults to
             :data:`~lag_data_utils.clients.http.DEFAULT_POOL_MAXSIZE`.
+        pool_connections : int
+            Forwarded to :meth:`__init__`. Defaults to
+            :data:`~lag_data_utils.clients.http.DEFAULT_POOL_CONNECTIONS`.
 
         Returns
         -------
@@ -239,6 +262,7 @@ class DataverseClient(ODataClient):
             timeout=timeout,
             retry=retry,
             pool_maxsize=pool_maxsize,
+            pool_connections=pool_connections,
         )
 
     # ------------------------------------------------------------------
@@ -273,12 +297,34 @@ class DataverseClient(ODataClient):
         call returns a cached token if its remaining lifetime exceeds MSAL's
         internal refresh threshold (approximately 5 minutes before expiry),
         eliminating unnecessary authentication network traffic.
+
+        Double-checked locking guards the network round-trip, not the
+        cache lookup: this method is called from every worker thread in
+        a concurrent sync run (see
+        ``runners.odata.BaseODataInventorySyncRunner.sync_records``) to prevent
+        cases wherein every thread that happens to see the cache expire at
+        the same moment would independently fire its own
+        ``acquire_token_for_client`` call against Entra ID. The initial
+        unlocked ``acquire_token_silent`` call keeps the common
+        cache-hit path lock-free. Only a miss acquires
+        :attr:`_token_lock`, and immediately re-checks the cache before
+        refreshing — so of however many threads see the initial miss,
+        only the first to acquire the lock actually calls Entra ID; every
+        thread behind it in the queue sees the now-populated cache on
+        its second check and never issues a redundant request.
         """
         result: Optional[Dict[str, Any]] = self._msal_app.acquire_token_silent(
             scopes=self._scope, account=None
         )
         if not result:
-            result = self._msal_app.acquire_token_for_client(scopes=self._scope)
+            with self._token_lock:
+                result = self._msal_app.acquire_token_silent(
+                    scopes=self._scope, account=None
+                )
+                if not result:
+                    result = self._msal_app.acquire_token_for_client(
+                        scopes=self._scope
+                    )
 
         if not result or "access_token" not in result:
             error_description: str = (result or {}).get(
