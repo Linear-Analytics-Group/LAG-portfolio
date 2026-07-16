@@ -24,3 +24,13 @@ DEDUPE_KEY: str = "sku_id"
 #: ``DataverseInventorySyncRunner.build_client()``, which derives the
 #: client's pool size from this same value automatically.
 DEFAULT_MAX_WORKERS: int = 10
+
+#: Row count per chunk when reading from a source that supports chunked
+#: reading (see ``sources.base.ChunkedInventorySource``). Bounds
+#: ``InventoryDomainMixin.load_records()``'s memory use to roughly one
+#: chunk plus one deduped row per unique ``dedupe_key`` value seen so
+#: far, rather than the entire source file at once. 10,000 is a starting
+#: point, not a measured optimum for any particular feed size — raise it
+#: for fewer, larger chunks (less read overhead, more peak memory) or
+#: lower it for the opposite trade-off.
+DEFAULT_CHUNK_SIZE: int = 10_000

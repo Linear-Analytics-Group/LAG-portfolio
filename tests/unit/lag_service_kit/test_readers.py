@@ -49,6 +49,48 @@ def test_csv_record_reader_raises_file_not_found_for_missing_path(
         CsvRecordReader().load(tmp_path / "does-not-exist.csv")
 
 
+def test_csv_record_reader_load_chunks_yields_bounded_row_counts(
+    tmp_path: Path,
+) -> None:
+    """load_chunks() yields successive chunks of at most chunksize rows."""
+    path = tmp_path / "records.csv"
+    rows = [
+        {"sku_id": f"SKU-{i:03d}", "item_name": "Widget", "unit_price": 1.0}
+        for i in range(5)
+    ]
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+    chunks = list(CsvRecordReader().load_chunks(path, chunksize=2))
+
+    assert [len(chunk) for chunk in chunks] == [2, 2, 1]
+
+
+def test_csv_record_reader_load_chunks_preserves_row_order_and_columns(
+    tmp_path: Path,
+) -> None:
+    """Concatenating every chunk reproduces load()'s full result exactly."""
+    path = tmp_path / "records.csv"
+    pd.DataFrame(SAMPLE_RECORDS).to_csv(path, index=False)
+
+    whole = CsvRecordReader().load(path)
+    chunked = pd.concat(
+        list(CsvRecordReader().load_chunks(path, chunksize=1)),
+        ignore_index=True,
+    )
+
+    assert chunked.equals(whole)
+
+
+def test_csv_record_reader_load_chunks_raises_file_not_found_immediately(
+    tmp_path: Path,
+) -> None:
+    """A missing path raises before the first chunk is even requested."""
+    with pytest.raises(FileNotFoundError):
+        CsvRecordReader().load_chunks(
+            tmp_path / "does-not-exist.csv", chunksize=10
+        )
+
+
 def test_json_record_reader_loads_orient_records_layout(
     tmp_path: Path,
 ) -> None:

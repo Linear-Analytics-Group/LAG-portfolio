@@ -14,10 +14,11 @@ import logging
 from typing import Any
 
 import pandas as pd
-from lag_service_kit.dedupe import dedupe_last_seen
+from lag_service_kit.dedupe import dedupe_last_seen, dedupe_last_seen_chunks
 
 from defaults import DEDUPE_KEY as DEDUPE_KEY
-from sources import InventorySource
+from defaults import DEFAULT_CHUNK_SIZE
+from sources import ChunkedInventorySource, InventorySource
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -28,8 +29,8 @@ class InventoryDomainMixin:
     Supplies the parts of an inventory sync that never vary regardless
     of which feed produced a record or which wire protocol writes it:
     binding to a composed :class:`sources.InventorySource` and
-    deduplicating by SKU. A destination leaf class combines this mixin
-    with a protocol-specific base (e.g.
+    deduplicating by the key provided. A destination leaf class combines 
+    this mixin with a protocol-specific base (e.g.
     ``runners.odata.BaseODataInventorySyncRunner``) to get both
     concerns without either one duplicating the other's logic — see
     ``DataverseInventorySyncRunner`` for a concrete example.
@@ -47,6 +48,7 @@ class InventoryDomainMixin:
         self,
         source: InventorySource,
         dedupe_key: str = DEDUPE_KEY,
+        chunksize: int = DEFAULT_CHUNK_SIZE,
         **kwargs: Any,
     ) -> None:
         """Bind this run to a source feed and its business-key column.
@@ -60,12 +62,16 @@ class InventoryDomainMixin:
             of this runner's destination or write protocol.
         dedupe_key : str
             The column name in ``source``'s records that uniquely
-            identifies an inventory item — ``"sku_id"`` for the shipped
-            mock feed. A customer whose source feed names this column
+            identifies an inventory item — e.g., ``"sku_id"`` for the
+            shipped mock feed. A customer whose source feed names this column
             differently overrides it here at construction time rather
             than forking this mixin; see README.md's "Constructor
             Injection vs. Environment Bloat" for why this is a
             constructor argument and not an environment variable.
+        chunksize : int
+            Row count per chunk when ``source`` also satisfies
+            ``sources.ChunkedInventorySource``. Ignored otherwise.
+            Defaults to :data:`~defaults.DEFAULT_CHUNK_SIZE`.
         **kwargs : Any
             Forwarded, unexamined, to ``super().__init__()`` — see Notes.
 
@@ -87,6 +93,7 @@ class InventoryDomainMixin:
         super().__init__(**kwargs)
         self.source = source
         self.dedupe_key = dedupe_key
+        self.chunksize = chunksize
 
     def load_records(self) -> pd.DataFrame:
         """Read this run's source feed and collapse duplicate SKU rows.
@@ -96,5 +103,20 @@ class InventoryDomainMixin:
         pd.DataFrame
             Deduplicated inventory records, with ``sku_id``, ``item_name``,
             and ``unit_price`` columns.
+
+        Notes
+        -----
+        When :attr:`source` also satisfies
+        ``sources.ChunkedInventorySource``, reads and dedupes it in
+        :attr:`chunksize`-row chunks via
+        ``lag_service_kit.dedupe.dedupe_last_seen_chunks`` — bounding
+        memory to roughly one chunk plus one row per unique
+        :attr:`dedupe_key` value, rather than the whole file at once.
+        Falls back to a single ``read_records()`` call otherwise, since
+        not every source format can stream (see
+        ``ChunkedInventorySource``'s docstring).
         """
+        if isinstance(self.source, ChunkedInventorySource):
+            chunks = self.source.read_record_chunks(self.chunksize)
+            return dedupe_last_seen_chunks(chunks, key=self.dedupe_key)
         return dedupe_last_seen(self.source.read_records(), key=self.dedupe_key)

@@ -6,8 +6,13 @@ through inheritance. Adding a source format never touches a runner;
 adding a destination never touches a source.
 """
 
-from .base import InventorySource
+from .base import ChunkedInventorySource, InventorySource
 from .csv import CsvInventorySource
 from .json import JsonInventorySource
 
-__all__ = ["InventorySource", "CsvInventorySource", "JsonInventorySource"]
+__all__ = [
+    "InventorySource",
+    "ChunkedInventorySource",
+    "CsvInventorySource",
+    "JsonInventorySource",
+]

@@ -8,6 +8,7 @@ runner by the caller, via composition, not inheritance.
 """
 
 from pathlib import Path
+from typing import Iterator
 
 import pandas as pd
 from lag_service_kit.readers import CsvRecordReader
@@ -59,3 +60,29 @@ class CsvInventorySource:
             If :attr:`csv_path` does not exist.
         """
         return CsvRecordReader().load(self.csv_path)
+
+    def read_record_chunks(self, chunksize: int) -> Iterator[pd.DataFrame]:
+        """Read the CSV feed in fixed-size row chunks.
+
+        Satisfies ``sources.base.ChunkedInventorySource``. Delegates to
+        ``CsvRecordReader.load_chunks``, the one reader that can
+        actually stream a file's rows in bounded memory (see its
+        docstring for why this capability isn't part of every reader).
+
+        Parameters
+        ----------
+        chunksize : int
+            Maximum number of rows per yielded chunk.
+
+        Returns
+        -------
+        Iterator[pd.DataFrame]
+            Successive row chunks in file order, with ``sku_id``,
+            ``item_name``, and ``unit_price`` columns.
+
+        Raises
+        ------
+        FileNotFoundError
+            If :attr:`csv_path` does not exist.
+        """
+        return CsvRecordReader().load_chunks(self.csv_path, chunksize)

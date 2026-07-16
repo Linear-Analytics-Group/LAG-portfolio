@@ -18,7 +18,7 @@ or anything else.
 from typing import Any, Dict
 
 from config import InventorySyncSettings
-from defaults import DEDUPE_KEY, DEFAULT_MAX_WORKERS
+from defaults import DEDUPE_KEY, DEFAULT_CHUNK_SIZE, DEFAULT_MAX_WORKERS
 from lag_data_utils.clients.dataverse import DataverseClient
 from sources import InventorySource
 
@@ -65,6 +65,7 @@ class DataverseInventorySyncRunner(
         entity_set: str = DEFAULT_ENTITY_SET,
         alternate_key_field: str = DEFAULT_ALTERNATE_KEY_FIELD,
         max_workers: int = DEFAULT_MAX_WORKERS,
+        chunksize: int = DEFAULT_CHUNK_SIZE,
     ) -> None:
         """Bind this run to a source feed and its Dataverse schema names.
 
@@ -87,6 +88,12 @@ class DataverseInventorySyncRunner(
             and, via :meth:`build_client`, used to size the destination
             client's HTTP connection pool to match. Defaults to
             :data:`~defaults.DEFAULT_MAX_WORKERS`.
+        chunksize : int
+            Row count per chunk when ``source`` also satisfies
+            ``sources.ChunkedInventorySource``. Forwarded to
+            :meth:`~runners.base.InventoryDomainMixin.__init__`. Ignored
+            for a source that reads in one shot. Defaults to
+            :data:`~defaults.DEFAULT_CHUNK_SIZE`.
 
         Returns
         -------
@@ -109,7 +116,10 @@ class DataverseInventorySyncRunner(
         not merely redundant.
         """
         super().__init__(
-            source=source, dedupe_key=dedupe_key, max_workers=max_workers
+            source=source,
+            dedupe_key=dedupe_key,
+            max_workers=max_workers,
+            chunksize=chunksize,
         )
         self._entity_set = entity_set
         self._alternate_key_field = alternate_key_field

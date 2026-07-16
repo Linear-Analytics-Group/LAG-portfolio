@@ -6,6 +6,8 @@ leaf class is needed to test its dedup/source-binding behavior in
 isolation.
 """
 
+from typing import Iterator, List
+
 import pandas as pd
 import pytest
 from runners.base import DEDUPE_KEY, InventoryDomainMixin
@@ -21,6 +23,32 @@ class _StubSource:
 
     def read_records(self) -> pd.DataFrame:
         return self._records
+
+
+class _StubChunkedSource:
+    """A source satisfying both InventorySource and ChunkedInventorySource.
+
+    Mirrors ``CsvInventorySource``'s real shape: every shipped chunked
+    source also supports a plain full read, with chunking as an
+    additional, optional capability layered on top — never a
+    replacement for it. ``read_records`` deliberately raises rather
+    than returning real data, so a test using this double proves
+    ``load_records()`` took the chunked path via the fact that
+    ``read_records`` was never called at all.
+    """
+
+    def __init__(self, chunks: List[pd.DataFrame]) -> None:
+        self._chunks = chunks
+        self.requested_chunksize: int = -1
+
+    def read_records(self) -> pd.DataFrame:
+        raise AssertionError(
+            "read_records() should not be called for a chunked source"
+        )
+
+    def read_record_chunks(self, chunksize: int) -> Iterator[pd.DataFrame]:
+        self.requested_chunksize = chunksize
+        return iter(self._chunks)
 
 
 def test_default_dedupe_key_is_sku_id() -> None:
@@ -102,6 +130,73 @@ def test_load_records_never_calls_read_records_more_than_once() -> None:
     mixin.load_records()
 
     assert source.read_count == 1
+
+
+def test_default_chunksize_is_stored() -> None:
+    """With no override, chunksize matches the shipped default."""
+    from defaults import DEFAULT_CHUNK_SIZE
+
+    mixin = InventoryDomainMixin(source=_StubSource(pd.DataFrame()))
+    assert mixin.chunksize == DEFAULT_CHUNK_SIZE
+
+
+def test_chunksize_override_is_stored() -> None:
+    """A customer-tuned chunk size overrides the default."""
+    mixin = InventoryDomainMixin(
+        source=_StubSource(pd.DataFrame()), chunksize=500
+    )
+    assert mixin.chunksize == 500
+
+
+def test_load_records_uses_the_chunked_path_for_a_chunked_source() -> None:
+    """A ChunkedInventorySource is read via read_record_chunks.
+
+    Proves ``InventoryDomainMixin`` actually dispatches on the source's
+    capability rather than always taking one fixed path — the stub
+    source's ``read_records`` raises if called at all, so a passing
+    test proves it was never reached.
+    """
+    chunk_one = pd.DataFrame(
+        [{"sku_id": "SKU-001", "item_name": "Widget", "unit_price": 9.99}]
+    )
+    chunk_two = pd.DataFrame(
+        [{"sku_id": "SKU-002", "item_name": "Gadget", "unit_price": 4.00}]
+    )
+    source = _StubChunkedSource([chunk_one, chunk_two])
+    mixin = InventoryDomainMixin(source=source, chunksize=1)
+
+    records = mixin.load_records()
+
+    assert len(records) == 2
+    assert source.requested_chunksize == 1
+
+
+def test_load_records_deduplicates_across_a_chunk_boundary() -> None:
+    """A duplicated key split across two chunks still resolves correctly.
+
+    This is the property that would silently break memory-bounded
+    reading if a naive implementation deduped each chunk independently
+    instead of carrying last-seen state across the whole stream.
+    """
+    chunk_one = pd.DataFrame(
+        [{"sku_id": "SKU-001", "item_name": "Widget", "unit_price": 9.99}]
+    )
+    chunk_two = pd.DataFrame(
+        [
+            {
+                "sku_id": "SKU-001",
+                "item_name": "Widget (updated)",
+                "unit_price": 12.50,
+            }
+        ]
+    )
+    source = _StubChunkedSource([chunk_one, chunk_two])
+    mixin = InventoryDomainMixin(source=source, chunksize=1)
+
+    records = mixin.load_records()
+
+    assert len(records) == 1
+    assert records.iloc[0]["item_name"] == "Widget (updated)"
 
 
 def test_constructor_cooperates_with_a_sibling_base_via_super() -> None:
