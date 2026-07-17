@@ -40,8 +40,9 @@ graph TD
         BODR["runners/odata.py<br/>BaseODataInventorySyncRunner"]
         CSVSRC["sources/csv.py<br/>CsvInventorySource"]
         JSONSRC["sources/json.py<br/>JsonInventorySource"]
-        SRC["sources/base.py<br/>InventorySource protocol"]
+        SRC["sources/base.py<br/>InventorySource ·<br/>ChunkedInventorySource protocols"]
         CFG["config.py<br/>InventorySyncSettings"]
+        DEFAULTS["defaults.py<br/>DEDUPE_KEY · DEFAULT_MAX_WORKERS ·<br/>DEFAULT_CHUNK_SIZE · DEFAULT_FAILURE_THRESHOLD"]
     end
 
     subgraph "shared/lag-service-kit — cross-service scaffolding"
@@ -49,12 +50,14 @@ graph TD
         BSS["settings.py<br/>BaseServiceSettings, find_repo_env_file()"]
         DCS["dataverse_settings.py<br/>DataverseConnectionSettings"]
         LOG["logging.py<br/>configure_logging()"]
-        RDR["readers/<br/>RecordReader protocol · Csv · Json · Parquet"]
-        DEDUPE["dedupe.py<br/>dedupe_last_seen()"]
+        RDR["readers/<br/>RecordReader protocol · Csv (+ chunked) · Json · Parquet"]
+        DEDUPE["dedupe.py<br/>dedupe_last_seen() · dedupe_last_seen_chunks()"]
+        CB["circuit_breaker.py<br/>ConsecutiveFailureCircuitBreaker"]
     end
 
     subgraph "shared/lag-data-utils — transport clients"
         BASE["base.py<br/>BaseClient, AuthenticationError"]
+        HTTP["http.py<br/>BaseHttpClient — pool, timeout, retry"]
         ODATA["odata.py<br/>ODataClient"]
         DV["dataverse.py<br/>DataverseClient"]
     end
@@ -65,7 +68,7 @@ graph TD
     DISR -->|"inherits (protocol base)"| BODR
     BODR -->|inherits| BSR
     CSVSRC -.->|satisfies| SRC
-    JSONSRC -.->|satisfies| SRC
+    JSONSRC -.->|satisfies, InventorySource only| SRC
     DISR -.->|"composes a source at construction time<br/>(injected, not inherited)"| SRC
     CFG -->|inherits| BSS
     CFG -->|inherits| DCS
@@ -74,16 +77,21 @@ graph TD
     CSVSRC --> RDR
     JSONSRC --> RDR
     IDM --> DEDUPE
+    IDM -.->|"isinstance check, optional capability"| SRC
+    IDM --> DEFAULTS
+    BODR --> DEFAULTS
+    BODR --> CB
+    DISR --> DEFAULTS
     BSR --> LOG
-    DV --> ODATA --> BASE
+    DV --> ODATA --> HTTP --> BASE
     DV -.->|"from_settings() accepts anything<br/>matching the Protocol"| DCS
 ```
 
 | Layer | Package | Owns | Must never contain |
 |---|---|---|---|
-| Transport | `shared/lag-data-utils` | HTTP/OData mechanics, MSAL auth, Dataverse-specific headers, the `AuthenticationError` hierarchy | Environment reads, a config framework, business logic |
-| Scaffolding | `shared/lag-service-kit` | Settings base classes, structured logging, input-format readers, generic dedup, the source- and destination-agnostic `BaseSyncRunner` orchestration algorithm (generic over the transport client type) | Dataverse-specific, inventory-specific, or source-format-specific knowledge |
-| Orchestration | `services/inventory-sync-engine` | Three independent things that combine, never duplicate: the domain mixin `InventoryDomainMixin` (dedup, source binding), one write-protocol base per wire protocol (`BaseODataInventorySyncRunner` today), and one destination leaf class per target system (`DataverseInventorySyncRunner`, combining exactly one of each) — plus, on a wholly separate axis, one `InventorySource` per feed format (`CsvInventorySource` and `JsonInventorySource` today), composed into a runner by the caller | Anything reusable by a service that isn't this one |
+| Transport | `shared/lag-data-utils` | HTTP mechanics (`BaseHttpClient` — pooling, timeout, retry-with-backoff), OData v4 CRUD (`ODataClient`), MSAL auth, Dataverse-specific headers, the `AuthenticationError` hierarchy | Environment reads, a config framework, business logic |
+| Scaffolding | `shared/lag-service-kit` | Settings base classes, structured logging, input-format readers (including chunked CSV reading), generic dedup (whole-DataFrame and chunked), a generic `ConsecutiveFailureCircuitBreaker`, the source- and destination-agnostic `BaseSyncRunner` orchestration algorithm (generic over the transport client type) | Dataverse-specific, inventory-specific, or source-format-specific knowledge; any baked-in default number tuned to one service (see `defaults.py`) |
+| Orchestration | `services/inventory-sync-engine` | Three independent things that combine, never duplicate: the domain mixin `InventoryDomainMixin` (dedup, source binding), one write-protocol base per wire protocol (`BaseODataInventorySyncRunner` today — concurrent upsert loop, circuit breaker), and one destination leaf class per target system (`DataverseInventorySyncRunner`, combining exactly one of each) — plus, on a wholly separate axis, one `InventorySource` per feed format (`CsvInventorySource`, the only one that also satisfies the optional `ChunkedInventorySource` capability, and `JsonInventorySource`), composed into a runner by the caller. `defaults.py` holds every constructor default tuned to this service specifically | Anything reusable by a service that isn't this one |
 
 Three axes vary independently here, and each stays a single point of
 definition:
@@ -211,9 +219,20 @@ for the parts every run requires regardless of axis.
   is declared here (for the one line in `sync_records()` that needs a
   record's business-key column) but never assigned here — a domain mixin
   is the only place that value is set, so it is never duplicated.
+  `sync_records()` dispatches up to `max_workers` upserts concurrently
+  via `ThreadPoolExecutor`, and builds one
+  `lag_service_kit.circuit_breaker.ConsecutiveFailureCircuitBreaker`
+  per run to stop dispatching further requests after
+  `failure_threshold` consecutive failures — both are protocol-level
+  concerns, not domain or destination knowledge, so they live here too.
 - `services/inventory-sync-engine/sources/base.py:InventorySource` — a
   `typing.Protocol`, not a base class. Fixes only the shape
-  (`read_records() -> pd.DataFrame`) that any source must expose.
+  (`read_records() -> pd.DataFrame`) that any source must expose. A
+  sibling protocol in the same module, `ChunkedInventorySource`, adds an
+  optional `read_record_chunks()` capability that only a source able to
+  genuinely stream in bounded memory need implement — `CsvInventorySource`
+  does; `JsonInventorySource` does not, and simply isn't checked via
+  `isinstance` against it.
 - `services/inventory-sync-engine/sources/csv.py:CsvInventorySource` —
   the source-format implementation. The only code in the service that
   knows how to read the ERP CSV feed. Knows nothing about
@@ -339,6 +358,12 @@ class InventoryDomainMixin:
         return dedupe_last_seen(self.source.read_records(), key=self.dedupe_key)
 ```
 
+(Simplified for this point: the real `load_records()` first checks
+whether `source` also satisfies the optional `ChunkedInventorySource`
+capability — see "Runtime Checkable Protocols" below — and reads/dedupes
+in bounded-memory chunks when it does, falling back to the single-shot
+call shown here otherwise.)
+
 Supporting a further format (Parquet, a REST feed) means adding one more
 sibling module implementing only `read_records()` with the matching
 `RecordReader`. No runner changes, because no runner inherits from a
@@ -359,14 +384,22 @@ driving the key dynamically via `.env` (e.g., `DEDUPE_KEY=item_sku`)
 vs. injecting the dependency/key via Python constructors.
 
 We chose **Constructor Injection** at the service layer for three
-critical enterprise reasons:
+critical enterprise reasons — a decision that has since generalized
+beyond `dedupe_key` to every tunable in `defaults.py`
+(`DEFAULT_MAX_WORKERS`, `DEFAULT_CHUNK_SIZE`,
+`DEFAULT_FAILURE_THRESHOLD`), each overridable the same way and never
+read from the environment:
 
 1. **Separation of Concerns (Domain vs. Environment):** Environmental
    variables (`.env`) should govern deployment-specific secrets,
    endpoints, and log levels. A deduplication key is a fundamental
-   business domain rule bound to the database schema. Exposing it to
-   `.env` would allow operational environments to break schema
-   mappings without a formal code review or deployment pipeline.
+   business domain rule bound to the database schema — and a
+   concurrency limit, chunk size, or failure threshold is an
+   operational tuning decision a code reviewer should see change in a
+   diff, not one silently flipped in a deployment's environment.
+   Exposing either kind to `.env` would allow operational environments
+   to change core sync behavior without a formal code review or
+   deployment pipeline.
 2. **Preventing Framework Pollution:** Forcing the generic
    `BaseSyncRunner` in the scaffolding kit to store and expose
    stateful configurations violates the Dependency Inversion
@@ -436,8 +469,9 @@ worker threads rather than stalling an entire 1,000-record batch.
 
 ### Runtime Checkable Protocols
 
-We use a `@runtime_checkable` Protocol (ChunkedSource) to dynamically detect 
-whether an incoming data source supports chunked streaming.
+We use a `@runtime_checkable` Protocol (`ChunkedInventorySource`, in
+`sources/base.py`) to dynamically detect whether an incoming data
+source supports chunked streaming.
 
 * **Interface Segregation & LSP:** Not all source formats can genuinely stream. 
 Forcing a dummy streaming method onto every reader violates the Liskov 
@@ -490,6 +524,18 @@ already-failing destination.
   a service-level tuning decision (`defaults.DEFAULT_FAILURE_THRESHOLD`),
   matching how `DEFAULT_CHUNK_SIZE` is handled.
 
+> **Assumption this design depends on:** the "no resume state" argument
+> above holds only because every write in this portfolio is an
+> idempotent alternate-key `PATCH` (Architectural Directive 2). A
+> future destination or protocol that *cannot* guarantee idempotent
+> writes (e.g. a plain `POST`-only create endpoint, or a bulk-load API
+> without an upsert primitive) would need the breaker paired with a
+> real resume/checkpoint mechanism — tracking exactly which records
+> were skipped, not just a count — before re-running the batch would be
+> safe. That case isn't addressed here and isn't in scope for this
+> portfolio at this time; it would need to be designed for explicitly
+> if a non-idempotent destination is ever added.
+
 ## Execution flow
 
 ```mermaid
@@ -502,7 +548,8 @@ sequenceDiagram
     participant Client as DataverseClient
     participant Entra as Microsoft Entra ID
     participant Reader as CsvRecordReader
-    participant Dedupe as dedupe_last_seen()
+    participant Dedupe as dedupe_last_seen[_chunks]()
+    participant Breaker as ConsecutiveFailureCircuitBreaker
     participant Dataverse as Dataverse Web API (v9.2)
 
     Main->>Source: CsvInventorySource()
@@ -518,7 +565,7 @@ sequenceDiagram
     Settings-->>Runner: validated config
 
     Runner->>Leaf: build_client(settings)
-    Leaf-->>Runner: DataverseClient.from_settings(settings)
+    Leaf-->>Runner: DataverseClient.from_settings(settings,<br/>pool_maxsize=2 * max_workers)
     Runner->>Client: acquire_bearer_token()
     Client->>Entra: OAuth2 client-credentials grant (MSAL)
     alt credentials rejected
@@ -529,31 +576,59 @@ sequenceDiagram
     Entra-->>Client: Bearer token (cached for reuse)
 
     Runner->>Leaf: load_records()
-    Leaf->>Source: self.source.read_records() [composed, not inherited]
-    Source->>Reader: load(csv_path)
-    Reader-->>Source: raw DataFrame (sku_id, item_name, unit_price)
-    Source-->>Leaf: raw DataFrame
-    Leaf->>Dedupe: dedupe_last_seen(df, key="sku_id")
+    alt source satisfies ChunkedInventorySource (CSV)
+        loop each chunksize-row chunk, in file order
+            Leaf->>Source: source.read_record_chunks(chunksize)
+            Source->>Reader: load_chunks(csv_path, chunksize)
+            Reader-->>Source: one chunk DataFrame
+            Source-->>Leaf: chunk DataFrame
+        end
+        Leaf->>Dedupe: dedupe_last_seen_chunks(chunks, key="sku_id")
+        Note over Dedupe: last-seen dict across chunks —<br/>memory ~ unique SKUs, not total rows
+    else source reads in one shot (JSON)
+        Leaf->>Source: source.read_records()
+        Source->>Reader: load(json_path)
+        Reader-->>Source: raw DataFrame
+        Source-->>Leaf: raw DataFrame
+        Leaf->>Dedupe: dedupe_last_seen(df, key="sku_id")
+    end
     Dedupe-->>Leaf: one row per sku_id (last-seen wins)
     Leaf-->>Runner: deduplicated records
 
     Runner->>Leaf: sync_records(client, records)
-    loop each deduplicated record
-        Leaf->>Leaf: build_payload(row)
-        Leaf->>Client: upsert_record(entity_set="lagsol_inventoryitems",<br/>alternate_key_name="lagsol_skuid", key_value=sku_id, payload)
-        Client->>Dataverse: HTTP PATCH /lagsol_inventoryitems(lagsol_skuid='...')
-        alt record didn't exist
-            Dataverse-->>Client: 201 Created
-        else record existed
-            Dataverse-->>Client: 204 No Content
-        else request rejected
-            Dataverse-->>Client: 4xx/5xx
-            Client-->>Leaf: requests.HTTPError (logged, counted, loop continues)
+    Leaf->>Breaker: new ConsecutiveFailureCircuitBreaker(failure_threshold)
+    Note over Leaf,Dataverse: ThreadPoolExecutor(max_workers) dispatches<br/>every record's steps below concurrently
+    loop each deduplicated record (up to max_workers in flight at once)
+        Leaf->>Breaker: is_tripped?
+        alt already tripped
+            Breaker-->>Leaf: True
+            Leaf-->>Leaf: "skipped" — no network call
+        else not yet tripped
+            Breaker-->>Leaf: False
+            Leaf->>Leaf: build_payload(row)
+            Leaf->>Client: upsert_record(entity_set="lagsol_inventoryitems",<br/>alternate_key_name="lagsol_skuid", key_value=sku_id, payload)
+            Client->>Dataverse: HTTP PATCH /lagsol_inventoryitems(lagsol_skuid='...')
+            alt record didn't exist
+                Dataverse-->>Client: 201 Created
+                Client-->>Leaf: response
+                Leaf->>Breaker: record_success()
+            else record existed
+                Dataverse-->>Client: 204 No Content
+                Client-->>Leaf: response
+                Leaf->>Breaker: record_success()
+            else request rejected (retried first, per BaseHttpClient)
+                Dataverse-->>Client: 4xx/5xx
+                Client-->>Leaf: requests.HTTPError (logged, counted)
+                Leaf->>Breaker: record_failure()
+                opt this failure just reached failure_threshold
+                    Breaker-->>Leaf: True — log "circuit breaker tripped"
+                end
+            end
         end
     end
-    Leaf-->>Runner: created/updated/failed counts
+    Leaf-->>Runner: created/updated/failed/skipped counts
 
-    Runner->>Runner: log tally, return 0 or 1
+    Runner->>Runner: log tally, return 0 (or 1 if anything failed)
     Runner-->>Main: exit code
 ```
 
@@ -568,6 +643,9 @@ read-then-decide step that a second run could race against.
 LAG-portfolio/
 ├── .env                                    # Local secrets — git-ignored, see .env.example
 ├── .env.example                            # Template for the 5 variables config.py reads
+├── pyproject.toml                          # [tool.mypy], [tool.pytest.ini_options] — one source of truth
+├── requirements-dev.txt                    # mypy, pydocstyle, pandas-stubs, types-requests, pytest-cov
+├── requirements-test.txt                   # pytest, responses — the tests/ suite's own dependencies
 ├── platform/
 │   └── power-platform/
 │       └── LAGInventorySync/                # Configuration-as-Code Dataverse solution manifest
@@ -577,38 +655,55 @@ LAG-portfolio/
 │   └── inventory-sync-engine/
 │       ├── config.py                        # InventorySyncSettings
 │       ├── dataverse_sync_runner.py         # Entrypoint — main() instantiates a leaf runner
+│       ├── defaults.py                      # DEDUPE_KEY, DEFAULT_MAX_WORKERS, DEFAULT_CHUNK_SIZE,
+│       │                                    # DEFAULT_FAILURE_THRESHOLD — this service's tuned numbers
 │       ├── runners/                          # Domain + protocol axes — mixin composition (multiple inheritance)
 │       │   ├── __init__.py                   # Exports InventoryDomainMixin, BaseODataInventorySyncRunner
 │       │   ├── base.py                       # InventoryDomainMixin — dedupe, composes a source (no client type)
-│       │   ├── odata.py                      # BaseODataInventorySyncRunner — the OData v4 upsert loop
+│       │   ├── odata.py                      # BaseODataInventorySyncRunner — concurrent upsert loop + breaker
 │       │   └── dataverse.py                  # DataverseInventorySyncRunner — the only Dataverse-specific code
 │       ├── sources/                          # Source axis — composed into a runner, never inherited
-│       │   ├── __init__.py                   # Exports InventorySource, CsvInventorySource, JsonInventorySource
-│       │   ├── base.py                       # InventorySource protocol
-│       │   ├── csv.py                        # CsvInventorySource — the only CSV-specific code
+│       │   ├── __init__.py                   # Exports InventorySource, ChunkedInventorySource, Csv/Json sources
+│       │   ├── base.py                       # InventorySource + ChunkedInventorySource protocols
+│       │   ├── csv.py                        # CsvInventorySource — the only source that streams in chunks
 │       │   └── json.py                       # JsonInventorySource — the only JSON-specific code
 │       ├── requirements.txt
+│       ├── generate_mock_data.py            # Dev/test mock feed generator — git-ignored, excluded from mypy
+│       ├── test_connection.py               # MSAL/Dataverse connectivity smoke test — also git-ignored
 │       └── data/
 │           ├── erp_mock_inventory_data_feed.csv
 │           └── erp_mock_inventory_data_feed.json
 │
-└── shared/
-    ├── lag-data-utils/                      # Transport clients
-    │   └── src/lag_data_utils/clients/
-    │       ├── base.py                       # BaseClient, AuthenticationError — auth contract + error root
-    │       ├── odata.py                      # ODataClient — generic OData v4 CRUD
-    │       └── dataverse.py                  # DataverseClient + from_settings() + Protocol
-    │
-    └── lag-service-kit/                     # Cross-service scaffolding
-        └── src/lag_service_kit/
-            ├── settings.py                   # BaseServiceSettings, find_repo_env_file()
-            ├── dataverse_settings.py         # DataverseConnectionSettings mixin
-            ├── logging.py                    # configure_logging()
-            ├── dedupe.py                      # dedupe_last_seen()
-            ├── readers/                       # RecordReader, Csv/Json/Parquet
-            └── runners/
-                ├── __init__.py                # Exports BaseSyncRunner
-                └── base.py                    # BaseSyncRunner[ClientT] — destination-agnostic orchestration
+├── shared/
+│   ├── lag-data-utils/                     # Transport clients
+│   │   └── src/lag_data_utils/clients/
+│   │       ├── base.py                      # BaseClient, AuthenticationError — auth contract + error root
+│   │       ├── http.py                      # BaseHttpClient — pooled session, timeout, retry-with-backoff
+│   │       ├── odata.py                     # ODataClient — generic OData v4 CRUD
+│   │       └── dataverse.py                 # DataverseClient + from_settings() + Protocol
+│   │
+│   └── lag-service-kit/                    # Cross-service scaffolding
+│       └── src/lag_service_kit/
+│           ├── settings.py                  # BaseServiceSettings, find_repo_env_file()
+│           ├── dataverse_settings.py        # DataverseConnectionSettings mixin
+│           ├── logging.py                   # configure_logging()
+│           ├── dedupe.py                     # dedupe_last_seen(), dedupe_last_seen_chunks()
+│           ├── circuit_breaker.py            # ConsecutiveFailureCircuitBreaker — any batch write loop
+│           ├── readers/                      # RecordReader, Csv (+ chunked)/Json/Parquet
+│           └── runners/
+│               ├── __init__.py               # Exports BaseSyncRunner
+│               └── base.py                   # BaseSyncRunner[ClientT] — destination-agnostic orchestration
+│
+└── tests/                                   # Centralized suite, layered to mirror the source tree
+    ├── conftest.py                           # Shared fixtures — fake Entra ID/Dataverse, no real network
+    ├── unit/
+    │   ├── lag_data_utils/                   # BaseClient, BaseHttpClient, ODataClient, DataverseClient
+    │   ├── lag_service_kit/                  # settings, dedupe, logging, readers, circuit breaker, BaseSyncRunner
+    │   └── inventory_sync_engine/            # InventoryDomainMixin, BaseODataInventorySyncRunner,
+    │                                          # DataverseInventorySyncRunner, CsvInventorySource
+    ├── integration/                          # Real classes across a mocked network boundary
+    └── acceptance/                           # Black-box: idempotency, operability, source/dest agnosticism,
+                                                # circuit breaker — one business requirement each
 ```
 
 ## Local environment setup
@@ -637,6 +732,15 @@ application user registered for the target Entra ID app.
    BaseServiceSettings` resolve straight to `shared/*/src/`, so edits to
    either shared package take effect immediately, with no reinstall and no
    `sys.path` manipulation.
+
+   Running the test suite or the Verification section's checks below
+   needs two more, root-level requirements files — not needed just to
+   run the service itself:
+
+   ```bash
+   pip install -r requirements-test.txt   # pytest, responses
+   pip install -r requirements-dev.txt    # mypy, pydocstyle, stubs, coverage
+   ```
 
 3. **Configure credentials.** Copy `.env.example` to `.env` at the repo
    root and fill in your Dataverse environment's values:
@@ -678,11 +782,13 @@ application user registered for the target Entra ID app.
 
 This repository holds itself to a strict bar (see `CLAUDE.md`'s
 Architectural Directives): every module under `shared/` and
-`services/inventory-sync-engine/` — `config.py`, `dataverse_sync_runner.py`,
-`runners/`, and `sources/` — passes both mypy and pydocstyle scans with zero
-findings. `generate_mock_data.py` is the one deliberate exception — a
-standalone dev/test data generator excluded via `[tool.mypy]`'s
-`exclude` in `pyproject.toml`, not part of the delivered service.
+`services/inventory-sync-engine/` — `config.py`, `defaults.py`,
+`dataverse_sync_runner.py`, `runners/`, and `sources/` — passes both
+mypy and pydocstyle scans with zero findings, and so does the entire
+`tests/` suite under mypy. `generate_mock_data.py` is the one deliberate
+exception — a standalone dev/test data generator excluded via
+`[tool.mypy]`'s `exclude` in `pyproject.toml`, not part of the
+delivered service.
 
 `pyproject.toml`'s `[tool.mypy]` section carries `--strict`,
 `--ignore-missing-imports`, the `pydantic.mypy` plugin (needed for
