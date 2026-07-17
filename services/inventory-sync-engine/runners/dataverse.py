@@ -18,7 +18,12 @@ or anything else.
 from typing import Any, Dict
 
 from config import InventorySyncSettings
-from defaults import DEDUPE_KEY, DEFAULT_CHUNK_SIZE, DEFAULT_MAX_WORKERS
+from defaults import (
+    DEDUPE_KEY,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_FAILURE_THRESHOLD,
+    DEFAULT_MAX_WORKERS,
+)
 from lag_data_utils.clients.dataverse import DataverseClient
 from sources import InventorySource
 
@@ -66,6 +71,7 @@ class DataverseInventorySyncRunner(
         alternate_key_field: str = DEFAULT_ALTERNATE_KEY_FIELD,
         max_workers: int = DEFAULT_MAX_WORKERS,
         chunksize: int = DEFAULT_CHUNK_SIZE,
+        failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
     ) -> None:
         """Bind this run to a source feed and its Dataverse schema names.
 
@@ -94,6 +100,12 @@ class DataverseInventorySyncRunner(
             :meth:`~runners.base.InventoryDomainMixin.__init__`. Ignored
             for a source that reads in one shot. Defaults to
             :data:`~defaults.DEFAULT_CHUNK_SIZE`.
+        failure_threshold : int
+            Consecutive upsert failures that trip
+            :meth:`~runners.odata.BaseODataInventorySyncRunner.sync_records`'s
+            circuit breaker. Forwarded to
+            :meth:`~runners.odata.BaseODataInventorySyncRunner.__init__`.
+            Defaults to :data:`~defaults.DEFAULT_FAILURE_THRESHOLD`.
 
         Returns
         -------
@@ -120,6 +132,7 @@ class DataverseInventorySyncRunner(
             dedupe_key=dedupe_key,
             max_workers=max_workers,
             chunksize=chunksize,
+            failure_threshold=failure_threshold,
         )
         self._entity_set = entity_set
         self._alternate_key_field = alternate_key_field

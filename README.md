@@ -454,6 +454,42 @@ network-heavy, I/O-bound pipeline, a microsecond-level CPU check is
 mathematically irrelevant compared to milliseconds of network latency, adding
 little-to-no cost to implementing this clean and predictable design.
 
+### Circuit Breaker vs. Unconditional Retry Exhaustion
+
+`BaseHttpClient`'s retry policy already absorbs transient failures
+(429/502/503/504) on a *single* request. It has no opinion on the
+*batch* as a whole — a systemic outage (Dataverse down, credentials
+revoked mid-run) looks identical to `sync_records()` as a string of
+isolated per-record failures, and without a higher-level check, every
+remaining record in the batch is still dispatched against an
+already-failing destination.
+
+* **Consecutive, not Rate-Based:** `ConsecutiveFailureCircuitBreaker`
+  trips after N failures in a row, not a percentage of a sliding
+  window. Simpler to reason about, and sufficient for what it needs to
+  detect — a sustained, one-sided outage — without the added
+  complexity of a windowed rate calculation.
+* **Skip, Don't Cancel:** Once tripped, a worker thread checks
+  `is_tripped` *before* issuing its request, not after. An
+  already-in-flight request (there can be up to `max_workers` of them)
+  is not interrupted — cancelling a request mid-flight risks an
+  ambiguous outcome (did the PATCH apply or not?) that a clean skip
+  avoids entirely.
+* **No Resume State, By Design:** A tripped run reports its skipped
+  count and exits non-zero; it does not persist which records were
+  skipped for a later resume. Every write is an idempotent alternate-
+  key upsert (see Architectural Directive 2), so re-running the whole
+  batch after the outage is fixed reproduces the correct end state at
+  no extra cost — a resume mechanism would be complexity solving a
+  problem idempotency already solves.
+* **Layered at `lag_service_kit`, Not the Runner:** The breaker itself
+  knows nothing about HTTP, OData, or Dataverse — it only sees a
+  stream of success/failure outcomes. It lives in the cross-service
+  scaffolding layer alongside `dedupe_last_seen_chunks`, reusable by
+  any future destination's write loop, while the *threshold value* is
+  a service-level tuning decision (`defaults.DEFAULT_FAILURE_THRESHOLD`),
+  matching how `DEFAULT_CHUNK_SIZE` is handled.
+
 ## Execution flow
 
 ```mermaid

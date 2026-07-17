@@ -17,9 +17,10 @@ from typing import Any, Dict
 import pandas as pd
 import requests
 from lag_data_utils.clients.odata import ODataClient
+from lag_service_kit.circuit_breaker import ConsecutiveFailureCircuitBreaker
 from lag_service_kit.runners import BaseSyncRunner
 
-from defaults import DEFAULT_MAX_WORKERS
+from defaults import DEFAULT_FAILURE_THRESHOLD, DEFAULT_MAX_WORKERS
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -57,15 +58,24 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
     dedupe_key: str
 
     def __init__(
-        self, max_workers: int = DEFAULT_MAX_WORKERS, **kwargs: Any
+        self,
+        max_workers: int = DEFAULT_MAX_WORKERS,
+        failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
+        **kwargs: Any,
     ) -> None:
-        """Set this run's upsert concurrency.
+        """Set this run's upsert concurrency and failure tolerance.
 
         Parameters
         ----------
         max_workers : int
             Worker threads used to upsert records concurrently in
             :meth:`sync_records`. Defaults to :data:`DEFAULT_MAX_WORKERS`.
+        failure_threshold : int
+            Consecutive failures (see
+            ``lag_service_kit.circuit_breaker.ConsecutiveFailureCircuitBreaker``
+            above) that trip :meth:`sync_records`'s circuit breaker,
+            skipping every record not yet attempted. Defaults to
+            :data:`DEFAULT_FAILURE_THRESHOLD`.
         **kwargs : Any
             Forwarded, unexamined, to ``super().__init__()``.
 
@@ -84,6 +94,7 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         """
         super().__init__()
         self._max_workers = max_workers
+        self._failure_threshold = failure_threshold
 
     @property
     @abstractmethod
@@ -116,7 +127,12 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         """
         ...
 
-    def _upsert_one(self, client: ODataClient, row: Any) -> str:
+    def _upsert_one(
+        self,
+        client: ODataClient,
+        row: Any,
+        breaker: ConsecutiveFailureCircuitBreaker,
+    ) -> str:
         """Upsert a single record, classifying the outcome as a string.
 
         Parameters
@@ -126,11 +142,14 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         row : Any
             A single ``NamedTuple`` row from :meth:`sync_records`'s
             ``records``.
+        breaker : ConsecutiveFailureCircuitBreaker
+            This run's shared circuit breaker (see :meth:`sync_records`).
 
         Returns
         -------
         str
-            ``"created"``, ``"updated"``, or ``"failed"``.
+            ``"created"``, ``"updated"``, ``"failed"``, or ``"skipped"``
+            if ``breaker`` was already tripped when this call started.
 
         Notes
         -----
@@ -138,7 +157,14 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         deliberately returns a plain value rather than mutating any
         shared state — the caller aggregates results back on the main
         thread, so no lock is needed here and one record's failure can
-        never corrupt another's count.
+        never corrupt another's count. ``breaker`` is the one piece of
+        state genuinely shared across worker threads, and it is
+        internally thread-safe for exactly this reason.
+
+        Checks ``breaker.is_tripped`` before issuing any request at
+        all: once tripped, every record not yet started is skipped
+        without ever touching the network, rather than continuing to
+        batter an already-failing destination for the rest of the run.
 
         Catches exactly ``requests.HTTPError`` (a rejected response),
         ``requests.ConnectionError`` (the connection itself failed), and
@@ -149,6 +175,9 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         uncaught rather than being silently absorbed into ``failed`` for
         every remaining record.
         """
+        if breaker.is_tripped:
+            return "skipped"
+
         key_value = getattr(row, self.dedupe_key)
         try:
             response = client.upsert_record(
@@ -169,8 +198,15 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
                 type(exc).__name__,
                 exc,
             )
+            if breaker.record_failure():
+                logger.error(
+                    "Circuit breaker tripped after %d consecutive "
+                    "failures; skipping remaining records.",
+                    self._failure_threshold,
+                )
             return "failed"
 
+        breaker.record_success()
         return "created" if response.status_code == 201 else "updated"
 
     def sync_records(
@@ -189,7 +225,9 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         Returns
         -------
         Dict[str, int]
-            Counts under the keys ``created``, ``updated``, and ``failed``.
+            Counts under the keys ``created``, ``updated``, ``failed``,
+            and ``skipped`` — the last being records never attempted
+            because the circuit breaker had already tripped.
 
         Notes
         -----
@@ -203,12 +241,28 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         main thread ever increments ``result``, so no lock is needed
         and the per-record failure isolation this class has always
         guaranteed holds unchanged under concurrency.
+
+        Builds a fresh
+        ``lag_service_kit.circuit_breaker.ConsecutiveFailureCircuitBreaker``
+        local to this call rather than storing one on ``self``, so a
+        run's failure streak never leaks into a later, separate run on
+        the same instance. Every future is still submitted up front —
+        only futures the executor hasn't started running yet actually
+        benefit from skipping (see :meth:`_upsert_one`); a batch no
+        larger than :attr:`_max_workers` will already be fully in
+        flight by the time the breaker could trip.
         """
-        result: Dict[str, int] = {"created": 0, "updated": 0, "failed": 0}
+        result: Dict[str, int] = {
+            "created": 0,
+            "updated": 0,
+            "failed": 0,
+            "skipped": 0,
+        }
+        breaker = ConsecutiveFailureCircuitBreaker(self._failure_threshold)
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures = [
-                executor.submit(self._upsert_one, client, row)
+                executor.submit(self._upsert_one, client, row, breaker)
                 for row in records.itertuples(index=False)
             ]
             for future in as_completed(futures):

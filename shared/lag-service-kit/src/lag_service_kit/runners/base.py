@@ -111,7 +111,15 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
         Returns
         -------
         Dict[str, int]
-            Counts under the keys ``created``, ``updated``, and ``failed``.
+            Counts under at least the keys ``created``, ``updated``, and
+            ``failed`` — the three every caller of :meth:`run` may rely
+            on. A concrete implementation may add further protocol- or
+            destination-specific keys beyond these three (e.g.
+            ``runners.odata.BaseODataInventorySyncRunner`` adds
+            ``skipped`` for records never attempted after a circuit
+            breaker trips); :meth:`run` never assumes anything beyond
+            the three required keys, so an implementation is free to do
+            so without breaking that contract.
         """
         ...
 

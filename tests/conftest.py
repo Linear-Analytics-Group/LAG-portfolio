@@ -7,7 +7,7 @@ Azure identity fabricates fake ones.
 """
 
 from pathlib import Path
-from typing import Callable, List
+from typing import Any, Callable, List
 
 import pandas as pd
 import pytest
@@ -202,13 +202,15 @@ def dataverse_runner_factory(
     -------
     Callable[..., DataverseInventorySyncRunner]
         A callable taking a ``source`` (satisfying ``InventorySource``)
-        and returning a ready-to-``.run()`` ``DataverseInventorySyncRunner``.
+        plus any other ``DataverseInventorySyncRunner`` constructor
+        keyword argument (e.g. ``failure_threshold``, ``max_workers``),
+        returning a ready-to-``.run()`` ``DataverseInventorySyncRunner``.
     """
     from types import SimpleNamespace
 
-    def _build(source: object) -> DataverseInventorySyncRunner:
+    def _build(source: object, **kwargs: Any) -> DataverseInventorySyncRunner:
         runner = DataverseInventorySyncRunner(
-            source=source  # type: ignore[arg-type]
+            source=source, **kwargs  # type: ignore[arg-type]
         )
         monkeypatch.setattr(
             runner,

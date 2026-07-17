@@ -34,3 +34,16 @@ DEFAULT_MAX_WORKERS: int = 10
 #: for fewer, larger chunks (less read overhead, more peak memory) or
 #: lower it for the opposite trade-off.
 DEFAULT_CHUNK_SIZE: int = 10_000
+
+#: Consecutive upsert failures that trip
+#: ``BaseODataInventorySyncRunner.sync_records()``'s circuit breaker
+#: (see ``lag_service_kit.circuit_breaker.ConsecutiveFailureCircuitBreaker``),
+#: skipping every record not yet attempted rather than continuing to
+#: batter an already-failing destination for the rest of the run. Low
+#: enough to react to a genuine, sustained outage within a handful of
+#: calls; high enough that a few isolated bad records (a data quality
+#: issue, not a systemic one) don't needlessly abort an otherwise-
+#: healthy run. Not destination-specific, but tuned to this service's
+#: own operational tolerance, not a universal constant — the breaker
+#: class itself takes no default (see its own docstring).
+DEFAULT_FAILURE_THRESHOLD: int = 5
