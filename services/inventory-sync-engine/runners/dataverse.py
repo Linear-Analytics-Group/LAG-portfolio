@@ -36,6 +36,16 @@ from .odata import BaseODataInventorySyncRunner
 DEFAULT_ENTITY_SET: str = "lagsol_inventoryitems"
 DEFAULT_ALTERNATE_KEY_FIELD: str = "lagsol_skuid"
 
+#: Source column name -> Dataverse field name. Data, not logic: a
+#: different customer's field names override this whole dict at
+#: construction time rather than requiring a ``build_payload()``
+#: override — see README.md's "Field Mapping: Constructor-Injected
+#: Dict vs. External Mapping File".
+DEFAULT_FIELD_MAPPING: Dict[str, str] = {
+    "item_name": "lagsol_name",
+    "unit_price": "lagsol_unitprice",
+}
+
 
 class DataverseInventorySyncRunner(
     InventoryDomainMixin, BaseODataInventorySyncRunner
@@ -69,6 +79,7 @@ class DataverseInventorySyncRunner(
         dedupe_key: str = DEDUPE_KEY,
         entity_set: str = DEFAULT_ENTITY_SET,
         alternate_key_field: str = DEFAULT_ALTERNATE_KEY_FIELD,
+        field_mapping: Dict[str, str] = DEFAULT_FIELD_MAPPING,
         max_workers: int = DEFAULT_MAX_WORKERS,
         chunksize: int = DEFAULT_CHUNK_SIZE,
         failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
@@ -88,6 +99,10 @@ class DataverseInventorySyncRunner(
         alternate_key_field : str
             The schema name of the Dataverse alternate key field.
             Defaults to :data:`DEFAULT_ALTERNATE_KEY_FIELD`.
+        field_mapping : Dict[str, str]
+            Source column name -> Dataverse field name, applied
+            generically by :meth:`build_payload`. Defaults to
+            :data:`DEFAULT_FIELD_MAPPING`.
         max_workers : int
             Worker threads used to upsert records concurrently. Forwarded
             to :meth:`~runners.odata.BaseODataInventorySyncRunner.__init__`
@@ -136,6 +151,7 @@ class DataverseInventorySyncRunner(
         )
         self._entity_set = entity_set
         self._alternate_key_field = alternate_key_field
+        self._field_mapping = field_mapping
 
     @property
     def entity_set(self) -> str:
@@ -211,21 +227,29 @@ class DataverseInventorySyncRunner(
         )
 
     def build_payload(self, row: Any) -> Dict[str, Any]:
-        """Map a generic inventory row to Dataverse's ``lagsol_`` field schema.
+        """Map a generic inventory row to Dataverse's field schema.
+
+        Applies :attr:`_field_mapping` generically rather than naming
+        source or destination fields here directly — the field names
+        themselves are data, supplied at construction time (see
+        :data:`DEFAULT_FIELD_MAPPING`), not logic hardcoded into this
+        method. See README.md's "Field Mapping: Constructor-Injected
+        Dict vs. External Mapping File" for why.
 
         Parameters
         ----------
         row : Any
-            A deduplicated inventory row with ``item_name`` and
-            ``unit_price`` attributes.
+            A deduplicated inventory row exposing every source column
+            name in :attr:`_field_mapping` as an attribute.
 
         Returns
         -------
         Dict[str, Any]
-            The ``lagsol_name`` and ``lagsol_unitprice`` field values for
-            the Dataverse upsert payload.
+            One key per :attr:`_field_mapping` value (a Dataverse field
+            name), holding the corresponding source column's value from
+            ``row``.
         """
         return {
-            "lagsol_name": row.item_name,
-            "lagsol_unitprice": row.unit_price,
+            dataverse_field: getattr(row, source_column)
+            for source_column, dataverse_field in self._field_mapping.items()
         }

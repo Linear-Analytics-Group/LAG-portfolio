@@ -1,13 +1,16 @@
 """Unit tests for runners.dataverse.DataverseInventorySyncRunner.
 
 Exercises only the constructor-injected configuration (dedupe_key,
-entity_set, alternate_key_field) in isolation, with no real source
-file and no HTTP mocking — the upsert loop itself is covered by the
-acceptance-level idempotency tests. Proves a customer deployment can
-adapt this leaf class's source- and destination-side identifier names
-without forking any code (see README.md's "Constructor Injection vs.
-Environment Bloat").
+entity_set, alternate_key_field, field_mapping) in isolation, with no
+real source file and no HTTP mocking — the upsert loop itself is
+covered by the acceptance-level idempotency tests. Proves a customer
+deployment can adapt this leaf class's source- and destination-side
+identifier names, and its field mapping, without forking any code (see
+README.md's "Constructor Injection vs. Environment Bloat" and "Field
+Mapping: Constructor-Injected Dict vs. External Mapping File").
 """
+
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -16,6 +19,7 @@ from runners.base import DEDUPE_KEY
 from runners.dataverse import (
     DEFAULT_ALTERNATE_KEY_FIELD,
     DEFAULT_ENTITY_SET,
+    DEFAULT_FIELD_MAPPING,
     DataverseInventorySyncRunner,
 )
 
@@ -84,6 +88,38 @@ def test_entity_set_and_alternate_key_field_can_be_overridden() -> None:
 
     assert runner.entity_set == "contoso_items"
     assert runner.alternate_key_field == "contoso_itemcode"
+
+
+def test_build_payload_uses_the_default_field_mapping() -> None:
+    """With no override, build_payload() matches today's shipped schema."""
+    runner = DataverseInventorySyncRunner(source=_StubSource())
+    row = SimpleNamespace(item_name="Widget", unit_price=9.99)
+
+    assert runner.build_payload(row) == {
+        "lagsol_name": "Widget",
+        "lagsol_unitprice": 9.99,
+    }
+    assert DEFAULT_FIELD_MAPPING == {
+        "item_name": "lagsol_name",
+        "unit_price": "lagsol_unitprice",
+    }
+
+
+def test_build_payload_field_mapping_can_be_overridden() -> None:
+    """A customer's differently-named source/destination fields override
+    the default mapping — proving build_payload() is generic over the
+    mapping's contents, not hardcoded to today's two fields.
+    """
+    runner = DataverseInventorySyncRunner(
+        source=_StubSource(),
+        field_mapping={"item_sku": "contoso_skucode", "qty": "contoso_qty"},
+    )
+    row = SimpleNamespace(item_sku="SKU-001", qty=42)
+
+    assert runner.build_payload(row) == {
+        "contoso_skucode": "SKU-001",
+        "contoso_qty": 42,
+    }
 
 
 def test_build_client_pool_size_defaults_to_twice_max_workers(

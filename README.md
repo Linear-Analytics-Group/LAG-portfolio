@@ -412,6 +412,48 @@ read from the environment:
    DataFrames instantly, without mocking global environment variables
    or loading `.env` files.
 
+### Field Mapping: Constructor-Injected Dict vs. External Mapping File
+
+Typically, enterprise-integration field mapping is achieved through a
+**metadata-driven, declarative mapping specification** — a YAML/JSON
+mapping document (or a mapping-UI that generates one), loaded and
+applied by a generic mapper at runtime. This approach lets
+non-engineers audit mappings, supports several customers' mappings off
+one deployed codebase, and enables tooling (schema-drift detection,
+mapping editors) that's impossible once a mapping is buried in a
+method body.
+
+We deliberately did **not** build that here:
+
+* **Scope Mismatch:** A full external mapping-file loader solves a
+  multi-tenant problem. This portfolio has one destination and a
+  three-column schema — building a generic mapping-config engine for
+  that would be premature abstraction with no current payoff.
+* **Consistency With an Existing, Documented Decision:** This codebase
+  already chose Constructor Injection over `.env`-driven configuration
+  specifically so schema-affecting changes go through code review and a
+  deployment pipeline (see "Constructor Injection vs. Environment
+  Bloat" above). A live-editable external mapping file without code review
+  requires safeguards beyond this project's current scope designed to
+  prevent inadvertent or silent data corruption in the destination system.
+* **Preventing the use of Data as Code:**
+  When data is set in code *as an unstructured method body* rather than as
+  *data*, it's opaque to review, impossible to reuse generically,
+  and requires a full method override to change it.
+
+**Constructor Injection:** `build_payload()` applies a
+constructor-injected `field_mapping: Dict[str, str]` (source column ->
+Dataverse field, defaulting to `DEFAULT_FIELD_MAPPING`) generically,
+via one dict comprehension. This approach stands up the mapping as
+data supplied at construction time, providing the flexibility needed
+to support varied Dataverse entities while the mapping itself still
+ships in code and goes through the same PR review as other schema
+changes.
+
+Scalability to support simultaneous mappings from a single deployment
+may require a shift to declarative-file configuration, provided that
+framework provides the necessary guardrails to prevent data corruption.
+
 ### Multi-Threaded Concurrency vs. OData v4 $batch
 
 To scale the execution speed of the sync engine beyond sequential, 
