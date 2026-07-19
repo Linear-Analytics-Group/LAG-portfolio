@@ -2,6 +2,7 @@
 
 from abc import abstractmethod
 from typing import Any, Dict, List, Optional, cast
+from urllib.parse import quote
 
 import requests
 
@@ -123,6 +124,54 @@ class ODataClient(BaseHttpClient):
             "Accept": "application/json",
         }
 
+    @staticmethod
+    def _encode_odata_string_value(value: str) -> str:
+        """Escape and URL-encode a value for use inside an OData string literal.
+
+        Two distinct, ordered transforms — conflating or reordering
+        them produces a URL that is either broken or unsafe:
+
+        1. **OData literal escaping.** Per the OData v4 ABNF
+           (``SQUOTE-IN-STRING = SQUOTE SQUOTE``), a single quote
+           *inside* a string value is escaped by doubling it, so the
+           value can safely sit inside the surrounding ``'...'``
+           delimiters this class adds around it. Skipping this step —
+           the OData analogue of a SQL injection vulnerability, not
+           merely a parsing accident — lets an embedded quote terminate
+           the string literal early, and an attacker or a corrupted
+           upstream record who controls this value could attempt to
+           alter which record the resulting ``PATCH``/``GET``/``DELETE``
+           actually targets, rather than just producing a malformed
+           request. (This method only ever builds a single-key
+           predicate, a narrower grammar than a ``$filter`` boolean
+           expression — it does not, by itself, expose ``$filter``- or
+           ``$expand``-style query-option injection; see
+           ``query_records``'s ``odata_filter``/``select_fields``
+           handling for that separate, currently-unused surface.)
+        2. **URL percent-encoding.** Separately, the escaped value must
+           be safe to sit inside a URL at all — spaces, ``#``, ``&``,
+           ``/``, and non-ASCII characters all require percent-encoding
+           or they corrupt the URL's own structure, independent of
+           OData syntax. ``safe=""`` deliberately leaves nothing
+           unencoded (the default ``safe="/"`` would let a value
+           containing a literal ``/`` alter the URL's path structure).
+
+        Parameters
+        ----------
+        value : str
+            The raw, untrusted business-key value (e.g., a SKU sourced
+            directly from an external feed).
+
+        Returns
+        -------
+        str
+            The value, quote-escaped then percent-encoded, safe to
+            interpolate directly between the ``'...'`` delimiters of
+            an OData string literal in a URL.
+        """
+        escaped = value.replace("'", "''")
+        return quote(escaped, safe="")
+
     def _build_entity_url(
         self,
         entity_set: str,
@@ -142,14 +191,20 @@ class ODataClient(BaseHttpClient):
         alternate_key_name : str
             The schema name of the alternate key field.
         key_value : str
-            The string-valued business key identifying the target record.
+            The string-valued business key identifying the target
+            record. Untrusted, externally-sourced data — escaped and
+            encoded via :meth:`_encode_odata_string_value` before being
+            interpolated into the URL, never spliced in raw.
 
         Returns
         -------
         str
             The fully-qualified OData resource URL for the specified record.
         """
-        entity_path = f"{entity_set}({alternate_key_name}='{key_value}')"
+        encoded_value = self._encode_odata_string_value(key_value)
+        entity_path = (
+            f"{entity_set}({alternate_key_name}='{encoded_value}')"
+        )
         return f"{self.base_url}/{entity_path}"
 
     # ------------------------------------------------------------------

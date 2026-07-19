@@ -42,6 +42,88 @@ def test_build_entity_url_follows_odata_v4_alternate_key_convention(
     assert url == expected
 
 
+def test_encode_odata_string_value_doubles_an_embedded_single_quote() -> None:
+    """A literal quote is escaped by doubling, per the OData v4 ABNF.
+
+    Unescaped, an embedded quote would terminate the surrounding
+    string literal early and corrupt the OData predicate — the OData
+    analogue of a SQL injection vulnerability.
+    """
+    encoded = ODataClient._encode_odata_string_value("O'Brien-01")
+
+    # Doubled first, then percent-encoded — decoding the URL reverses
+    # only the percent-encoding, so the server sees the doubled quote.
+    assert encoded == "O%27%27Brien-01"
+
+
+def test_encode_odata_string_value_percent_encodes_url_special_characters() -> (
+    None
+):
+    """Characters that would corrupt the URL itself are percent-encoded."""
+    encoded = ODataClient._encode_odata_string_value("A/B 100#2&more")
+
+    assert encoded == "A%2FB%20100%232%26more"
+    assert "/" not in encoded
+    assert " " not in encoded
+    assert "#" not in encoded
+    assert "&" not in encoded
+
+
+def test_encode_odata_string_value_leaves_a_plain_value_unchanged() -> None:
+    """A value with no special characters passes through byte-for-byte."""
+    assert ODataClient._encode_odata_string_value("SKU-001") == "SKU-001"
+
+
+def test_build_entity_url_safely_encodes_an_embedded_single_quote(
+    client: _ConcreteODataClient,
+) -> None:
+    """A SKU containing a quote produces a well-formed, parseable URL.
+
+    Before this fix, this exact SKU value produced
+    ``.../lagsol_inventoryitems(lagsol_skuid='O'Brien-01')`` — a
+    malformed OData predicate where the embedded quote terminates the
+    string literal three characters early.
+    """
+    url = client._build_entity_url(
+        "lagsol_inventoryitems", "lagsol_skuid", "O'Brien-01"
+    )
+
+    expected = (
+        f"{FAKE_BASE_URL}/lagsol_inventoryitems"
+        "(lagsol_skuid='O%27%27Brien-01')"
+    )
+    assert url == expected
+    # No raw, unescaped quote reaches the URL outside the two
+    # delimiters this method itself adds.
+    assert url.count("'") == 2
+
+
+@responses.activate
+def test_upsert_record_with_a_quoted_sku_reaches_the_correctly_encoded_url(
+    client: _ConcreteODataClient,
+) -> None:
+    """The real upsert_record() path — not just the URL builder in
+
+    isolation — sends a request to the correctly escaped and encoded
+    URL for a SKU containing an apostrophe.
+    """
+    url = (
+        f"{FAKE_BASE_URL}/lagsol_inventoryitems"
+        "(lagsol_skuid='O%27%27Brien-01')"
+    )
+    responses.add(responses.PATCH, url, status=201)
+
+    response = client.upsert_record(
+        entity_set="lagsol_inventoryitems",
+        alternate_key_name="lagsol_skuid",
+        key_value="O'Brien-01",
+        payload={"lagsol_name": "Widget"},
+    )
+
+    assert response.status_code == 201
+    assert responses.calls[0].request.url == url
+
+
 def test_get_headers_includes_bearer_token_and_odata_headers(
     client: _ConcreteODataClient,
 ) -> None:
