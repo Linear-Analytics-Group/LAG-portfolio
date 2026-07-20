@@ -685,9 +685,9 @@ read-then-decide step that a second run could race against.
 LAG-portfolio/
 ├── .env                                    # Local secrets — git-ignored, see .env.example
 ├── .env.example                            # Template for the 5 variables config.py reads
-├── pyproject.toml                          # [tool.mypy], [tool.pytest.ini_options] — one source of truth
-├── requirements-dev.txt                    # mypy, pydocstyle, pandas-stubs, types-requests, pytest-cov
-├── requirements-test.txt                   # pytest, responses — the tests/ suite's own dependencies
+├── pyproject.toml                          # [tool.mypy], [tool.pytest.ini_options], and the [project]/
+│                                            # [project.optional-dependencies] "dev"/"test" extras — this
+│                                            # repo's own dev/test tooling, never published (see below)
 ├── platform/
 │   └── power-platform/
 │       └── LAGInventorySync/                # Configuration-as-Code Dataverse solution manifest
@@ -750,7 +750,7 @@ LAG-portfolio/
 
 ## Local environment setup
 
-**Prerequisites:** Python 3.11+, a Dataverse environment with an
+**Prerequisites:** Python 3.9+, a Dataverse environment with an
 application user registered for the target Entra ID app.
 
 1. **Create and activate a virtual environment** at the repo root:
@@ -776,13 +776,27 @@ application user registered for the target Entra ID app.
    `sys.path` manipulation.
 
    Running the test suite or the Verification section's checks below
-   needs two more, root-level requirements files — not needed just to
-   run the service itself:
+   needs the root `pyproject.toml`'s optional dependency groups — these
+   are not needed when simply running the service itself. The root
+   project has no
+   module content of its own — there's nothing to iterate on, so
+   unlike the two shared packages above, a plain (non-editable) install
+   is all this needs; this exists only to resolve the `dev`/`test`
+   extras:
 
    ```bash
-   pip install -r requirements-test.txt   # pytest, responses
-   pip install -r requirements-dev.txt    # mypy, pydocstyle, stubs, coverage
+   pip install ".[dev,test]"   # pytest, responses, mypy, pydocstyle, coverage
    ```
+
+   CI (`.github/workflows/ci.yml`) deliberately does **not** use
+   editable installs for the two shared packages either — it builds a
+   real wheel for each (`python -m build --wheel`) and installs that,
+   so CI validates the actual artifact a release would ship, not a
+   source-tree reference that can hide packaging bugs (e.g., a
+   `[tool.hatch.build]` misconfiguration silently excluding a file from
+   the real wheel). Editable installs remain the right choice here, in
+   local dev, specifically because the goal is different: fast
+   iteration on shared-package code, not artifact validation.
 
 3. **Configure credentials.** Copy `.env.example` to `.env` at the repo
    root and fill in your Dataverse environment's values:
@@ -842,6 +856,16 @@ same configuration as CI:
 mypy <files>
 pydocstyle --convention=numpy <files>
 ```
+
+This is mechanically enforced, not just documented: `.github/workflows/ci.yml`
+runs mypy, pydocstyle, and the full `tests/` suite on every push and pull
+request against `trunk`, from a clean checkout — see that workflow for
+the exact commands. The same root `pyproject.toml` also declares this
+repo's own dev/test tooling (`mypy`, `pydocstyle`, `pytest`, `responses`,
+etc.) as `[project.optional-dependencies]` extras (`pip install -e
+".[dev,test]"`) rather than separate `requirements-*.txt` files — the
+modern, PEP 621-aligned way to declare tooling dependencies, and what CI
+itself installs from.
 
 Both `lag-data-utils` and `lag-service-kit` ship a
 `py.typed` marker (PEP 561) so a consumer running `mypy --strict` against

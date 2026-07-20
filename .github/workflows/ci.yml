@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [trunk]
+  pull_request:
+    branches: [trunk]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: mypy, pydocstyle, pytest (Python 3.9)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+
+      - name: Install build tooling
+        run: pip install build
+
+      - name: Build and install shared packages
+        run: |
+          python -m build --wheel ./shared/lag-data-utils
+          pip install ./shared/lag-data-utils/dist/*.whl
+
+          python -m build --wheel ./shared/lag-service-kit
+          pip install ./shared/lag-service-kit/dist/*.whl
+
+      - name: Install service dependencies and dev/test tooling
+        run: |
+          pip install -r services/inventory-sync-engine/requirements.txt
+          pip install ".[dev,test]"
+
+      - name: Type-check (mypy --strict)
+        run: >
+          mypy
+          shared/lag-data-utils/src
+          services/inventory-sync-engine
+          shared/lag-service-kit/src
+          tests
+
+      - name: Docstring convention (pydocstyle --convention=numpy)
+        run: >
+          pydocstyle --convention=numpy
+          shared/lag-data-utils/src
+          shared/lag-service-kit/src
+          services/inventory-sync-engine/config.py
+          services/inventory-sync-engine/dataverse_sync_runner.py
+          services/inventory-sync-engine/defaults.py
+          services/inventory-sync-engine/runners
+          services/inventory-sync-engine/sources
+
+      - name: Test suite (tests/)
+        run: pytest tests/ --cov --cov-report=term-missing

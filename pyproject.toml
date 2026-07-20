@@ -1,3 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lag-portfolio"
+version = "0.0.0"
+description = "Repo-wide dev/test tooling, never published — see shared/lag-data-utils and shared/lag-service-kit for the real packages"
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.10.0",
+    "pandas-stubs>=2.2.0",
+    "types-requests>=2.31.0",
+    "pydocstyle>=6.3.0",
+    "pytest-cov>=5.0.0",
+]
+test = [
+    "pytest>=8.0.0",
+    "responses>=0.25.0",
+]
+
+[tool.hatch.build.targets.wheel]
+# No module content to package — this pyproject.toml exists only to host
+# [project.optional-dependencies] via `pip install ".[dev,test]"`.
+bypass-selection = true
+
 [tool.mypy]
 # pydantic-settings' BaseSettings sources required fields from the
 # environment/.env at runtime, not from constructor args — without this
@@ -20,9 +48,17 @@ exclude = ["(^|/)generate_mock_data\\.py$"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
+# services/inventory-sync-engine is a deployable service's script
+# directory, never a pip-installed package — there is no real
+# artifact for this to shadow. lag-data-utils and lag-service-kit are
+# deliberately NOT listed here: both are real, separately-built
+# packages, and adding their src/ paths would put them at the front
+# of sys.path (pytest's own documented behavior for this option),
+# silently shadowing whatever is actually pip-installed — causing a
+# "testing the source tree instead of the shipped artifact" problem
+# that should not be employed in production. building and installing
+# real wheels in CI rather than editable-installing them.
 pythonpath = [
-    "shared/lag-data-utils/src",
-    "shared/lag-service-kit/src",
     "services/inventory-sync-engine",
 ]
 markers = [

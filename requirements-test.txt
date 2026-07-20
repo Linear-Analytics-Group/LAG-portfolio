@@ -1,4 +1,0 @@
-# Test-only dependencies for the centralized suite in tests/.
-# Not required to run the service itself — see services/inventory-sync-engine/requirements.txt.
-pytest>=8.0.0
-responses>=0.25.0
