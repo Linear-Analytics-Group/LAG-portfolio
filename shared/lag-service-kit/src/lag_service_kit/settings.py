@@ -1,10 +1,12 @@
 """Base Pydantic settings shared by every LAG service, plus `.env` discovery."""
 
 from pathlib import Path
-from typing import Optional
+from typing import ClassVar, Optional, Tuple, Type
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+
+from .azure_key_vault import AzureKeyVaultSettingsSource
 
 
 def find_repo_env_file(start: Path) -> Optional[Path]:
@@ -48,11 +50,31 @@ class BaseServiceSettings(BaseSettings):
         Root logging level for the service's structured logging matrix.
         Read from the ``LOG_LEVEL`` environment variable. Defaults to
         ``"INFO"``.
+    azure_key_vault_url : str, optional
+        URL of an Azure Key Vault to resolve secret fields from (see
+        ``vault_secret_fields``). Read from the ``AZURE_KEY_VAULT_URL``
+        environment variable. When unset, no Key Vault lookup is ever
+        attempted and every field resolves from environment variables
+        or `.env` exactly as it always has — this is an optional
+        upgrade, not a requirement.
+
+    Notes
+    -----
+    ``vault_secret_fields`` is a class variable, not a pydantic field
+    (excluded from the model via ``ClassVar``) — it declares *which*
+    fields a concrete settings class considers true secrets, not a
+    runtime value. Empty here; a mixin that actually owns a secret
+    (e.g. ``DataverseConnectionSettings.azure_client_secret``) overrides
+    it, the same declared-but-not-defined pattern already used
+    elsewhere in this codebase for a domain-owned attribute.
     """
 
     log_level: str = Field(default="INFO")
+    azure_key_vault_url: Optional[str] = Field(default=None)
 
-    @field_validator("log_level", mode="before")
+    vault_secret_fields: ClassVar[Tuple[str, ...]] = ()
+
+    @field_validator("log_level", "azure_key_vault_url", mode="before")
     @classmethod
     def _strip_whitespace(cls, value: str) -> str:
         """Strip leading/trailing whitespace from a raw environment value.
@@ -69,3 +91,63 @@ class BaseServiceSettings(BaseSettings):
             The value with leading and trailing whitespace removed.
         """
         return value.strip() if isinstance(value, str) else value
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        """Insert an Azure Key Vault source when one is configured.
+
+        Parameters
+        ----------
+        settings_cls : Type[BaseSettings]
+            The concrete settings class being resolved.
+        init_settings : PydanticBaseSettingsSource
+            Values passed directly to the constructor.
+        env_settings : PydanticBaseSettingsSource
+            Real process environment variables.
+        dotenv_settings : PydanticBaseSettingsSource
+            Values from a `.env` file.
+        file_secret_settings : PydanticBaseSettingsSource
+            Values from Docker/Kubernetes-style secret files.
+
+        Returns
+        -------
+        Tuple[PydanticBaseSettingsSource, ...]
+            The sources pydantic-settings will try, in priority order
+            (first wins): constructor kwargs, then real environment
+            variables, then — only when ``AZURE_KEY_VAULT_URL`` is
+            actually set — Key Vault, then `.env`, then secret files.
+            A real environment variable always overrides Key Vault,
+            which always overrides `.env`; Key Vault is absent from
+            the chain entirely (not merely empty) when unconfigured,
+            so it costs nothing and changes nothing for a deployment
+            that never sets ``AZURE_KEY_VAULT_URL``.
+
+        Notes
+        -----
+        Decides whether Key Vault is configured by calling
+        ``env_settings()`` itself — the same
+        ``pydantic_settings.EnvSettingsSource`` pydantic-settings would
+        use anyway — rather than reading ``os.environ`` directly. This
+        reuses this class's own ``case_sensitive``/encoding
+        configuration instead of duplicating it, and deliberately does
+        *not* consult ``dotenv_settings``: a `.env`-only value never
+        enables Key Vault, so the local-only fallback path can never be
+        surprised into making a live network call it didn't ask for.
+        """
+        sources = [init_settings, env_settings]
+
+        vault_url = env_settings().get("azure_key_vault_url")
+        if isinstance(vault_url, str) and vault_url.strip():
+            sources.append(
+                AzureKeyVaultSettingsSource(settings_cls, vault_url.strip())
+            )
+
+        sources.extend([dotenv_settings, file_secret_settings])
+        return tuple(sources)

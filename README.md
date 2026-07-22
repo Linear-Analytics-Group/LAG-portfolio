@@ -412,6 +412,59 @@ read from the environment:
    DataFrames instantly, without mocking global environment variables
    or loading `.env` files.
 
+### Secrets Management: Azure Key Vault vs. Plain `.env`
+
+`AZURE_CLIENT_SECRET` — the Entra ID app registration's credential —
+originally lived only in a plaintext, git-ignored `.env` file. That's
+adequate for a solo developer's local machine, but not for a service
+meant to demonstrate enterprise-grade secrets handling: a plaintext
+file is one accidental `git add -f`, shared support ticket, or backup
+away from leaking a live credential.
+
+**Two separate identities are in play here, easy to conflate:** the
+Entra ID app registration (service principal) that authenticates *to
+Dataverse* via MSAL, versus whatever identity is allowed to *read the
+secret out of Key Vault* in the first place — your own Azure AD user
+locally (`az login`), or a Managed Identity if this ever ran inside
+Azure. `azure.identity.DefaultAzureCredential` resolves the second
+one transparently, trying a chain of credential sources in order, so
+the exact same code path handles both without branching on where it's
+running.
+
+**The mechanism:**
+`lag_service_kit.azure_key_vault.AzureKeyVaultSettingsSource` is a
+`pydantic_settings.PydanticBaseSettingsSource` — the same extension
+point `BaseSettings` already uses internally for environment variables
+and `.env` — added via
+`BaseServiceSettings.settings_customise_sources()` only when
+`AZURE_KEY_VAULT_URL` is actually set as a real environment variable
+(checked via `env_settings()`, not a raw `os.environ` read, so it
+reuses this class's own case-sensitivity/encoding configuration
+instead of duplicating it). Priority, highest wins: a real environment
+variable, then Key Vault, then `.env`. Unconfigured, Key Vault is
+absent from the resolution chain entirely — not merely empty — so it
+costs nothing and changes nothing for a deployment that never sets
+`AZURE_KEY_VAULT_URL`. This is an optional upgrade, not a requirement;
+the `.env`-only path stays fully supported for local dev without Azure
+access at all.
+
+**All four Dataverse connection values are vault-backed, not just the
+client secret** — declared via `vault_secret_fields` on
+`DataverseConnectionSettings`. The tenant ID, client ID, and Dataverse
+URL aren't credentials on their own, but in a *public* repository they
+are real reconnaissance value: together they identify exactly which
+Entra ID tenant and live Dataverse environment this points to, a
+specific target for phishing or consent-phishing against this exact
+app registration, even though none of the three would authenticate
+anything by itself.
+
+**Provisioning is infrastructure-as-code**, not a manual portal
+click-through — see `infra/azure/key-vault/` for the scripts that
+create the vault (RBAC-authorized, not the legacy access-policy
+model), grant the minimum role needed, and push values in. Every
+example in that directory uses placeholder names; no real resource
+names or subscription identifiers appear in this repository.
+
 ### Field Mapping: Constructor-Injected Dict vs. External Mapping File
 
 Typically, enterprise-integration field mapping is achieved through a
@@ -453,6 +506,40 @@ changes.
 Scalability to support simultaneous mappings from a single deployment
 may require a shift to declarative-file configuration, provided that
 framework provides the necessary guardrails to prevent data corruption.
+
+### Monorepo Dependency Resolution: Install Order vs. a Private Feed
+
+`lag-service-kit`'s `pyproject.toml` declares `lag-data-utils>=1.0.0`
+in exactly the same form as any PyPI dependency (`pydantic>=2.7.0`,
+`pandas>=2.2.0`). There is no `pyproject.toml` syntax that marks one
+dependency as "resolve this from a local path" and another as
+"resolve this from a package index" — pip has no such distinction
+built in.
+
+**How this actually resolves today:** purely by install order, not by
+anything declared in the metadata. Every documented workflow in this
+repo — the local setup steps below, and CI's explicit `lag-data-utils`
+wheel build before `lag-service-kit`'s — installs `lag-data-utils`
+first, so by the time pip is asked to satisfy `lag-data-utils>=1.0.0`,
+it is already present in the environment and pip never looks anywhere
+else for it. Reverse that order, in an environment with no local
+`lag-data-utils` already present, and this fails outright —
+`lag-data-utils` isn't actually published anywhere pip reaches by
+default.
+
+**The enterprise-grade fix, and why it's not here:** the robust answer
+is a private package index — an internal Azure Artifacts feed, or a
+self-hosted PyPI-compatible server — that actually publishes
+`lag-data-utils`, so it resolves like any other dependency regardless
+of install order. (A monorepo-aware tool with native workspace/path
+dependencies, like `uv` or PDM, is the other real fix, at the cost of
+a bigger toolchain change.) Standing up either is out of scope here:
+one internal package, consumed by exactly one sibling package, in a
+repo with two documented install paths — local dev and CI — that both
+already get the order right. This note exists to make that a
+documented, understood tradeoff rather than a silent gap — the
+trigger to revisit it is a second internal consumer, a third install
+path, or any of this actually being published externally.
 
 ### Multi-Threaded Concurrency vs. OData v4 $batch
 
@@ -862,7 +949,7 @@ runs mypy, pydocstyle, and the full `tests/` suite on every push and pull
 request against `trunk`, from a clean checkout — see that workflow for
 the exact commands. The same root `pyproject.toml` also declares this
 repo's own dev/test tooling (`mypy`, `pydocstyle`, `pytest`, `responses`,
-etc.) as `[project.optional-dependencies]` extras (`pip install -e
+etc.) as `[project.optional-dependencies]` extras (`pip install
 ".[dev,test]"`) rather than separate `requirements-*.txt` files — the
 modern, PEP 621-aligned way to declare tooling dependencies, and what CI
 itself installs from.

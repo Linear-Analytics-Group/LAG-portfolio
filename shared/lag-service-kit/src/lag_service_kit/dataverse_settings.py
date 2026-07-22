@@ -1,5 +1,7 @@
 """Pydantic settings mixin for services that connect to Microsoft Dataverse."""
 
+from typing import ClassVar, Tuple
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
@@ -11,21 +13,34 @@ class DataverseConnectionSettings(BaseSettings):
     ----------
     azure_tenant_id : str
         Microsoft Entra ID tenant GUID for the target Dataverse environment.
-        Read from the ``AZURE_TENANT_ID`` environment variable.
+        Read from the ``AZURE_TENANT_ID`` environment variable, or Azure
+        Key Vault as ``azure-tenant-id`` when ``AZURE_KEY_VAULT_URL`` is
+        set (see ``vault_secret_fields`` below).
     azure_client_id : str
         Application (client) ID of the registered Entra ID app. Read from
-        the ``AZURE_CLIENT_ID`` environment variable.
+        the ``AZURE_CLIENT_ID`` environment variable, or Key Vault as
+        ``azure-client-id``.
     azure_client_secret : str
         Client secret credential for the registered Entra ID application.
-        Read from the ``AZURE_CLIENT_SECRET`` environment variable.
+        Read from the ``AZURE_CLIENT_SECRET`` environment variable, or
+        Key Vault as ``azure-client-secret``.
     dataverse_url : str
         Root URL of the target Dataverse environment (e.g.,
         ``"https://org.crm.dynamics.com"``). Read from the
-        ``DATAVERSE_URL`` environment variable. A trailing slash is
-        stripped automatically.
+        ``DATAVERSE_URL`` environment variable, or Key Vault as
+        ``dataverse-url``. A trailing slash is stripped automatically.
 
     Notes
     -----
+    All four fields are declared in ``vault_secret_fields``, not just
+    ``azure_client_secret`` — the tenant ID, client ID, and Dataverse
+    URL aren't credentials on their own, but together they identify
+    exactly which Entra ID tenant and live Dataverse environment this
+    points to. In a public repository, that's real reconnaissance
+    value to an attacker (a specific target for phishing or
+    consent-phishing against this exact app registration), even though
+    none of the three would authenticate anything by themselves.
+
     Any concrete settings class mixing this in structurally satisfies
     ``lag_data_utils.clients.dataverse.DataverseConnectionSettings`` (a
     ``typing.Protocol``), and can be passed directly to
@@ -37,6 +52,13 @@ class DataverseConnectionSettings(BaseSettings):
     azure_client_id: str = Field(..., min_length=1)
     azure_client_secret: str = Field(..., min_length=1)
     dataverse_url: str = Field(..., min_length=1)
+
+    vault_secret_fields: ClassVar[Tuple[str, ...]] = (
+        "azure_tenant_id",
+        "azure_client_id",
+        "azure_client_secret",
+        "dataverse_url",
+    )
 
     @field_validator(
         "azure_tenant_id",

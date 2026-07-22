@@ -11,7 +11,9 @@ dependencies = [
     "pydantic-settings>=2.4.0",
     "pandas>=2.2.0",
     "pyarrow>=14.0.0",
-    "lag-data-utils>=1.0.0"
+    "lag-data-utils>=1.0.0",
+    "azure-identity>=1.17.0",
+    "azure-keyvault-secrets>=4.8.0"
 ]
 
 [tool.hatch.build.targets.wheel]
