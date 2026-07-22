@@ -157,16 +157,31 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
             records = self.load_records()
             result = self.sync_records(client, records)
         except ValidationError as exc:
-            logger.error("Configuration error: %s", exc)
+            logger.error(
+                "Configuration error: %s",
+                exc,
+                extra={"error_type": type(exc).__name__},
+            )
             return 1
         except AuthenticationError as exc:
-            logger.error("Authentication error: %s", exc)
+            logger.error(
+                "Authentication error: %s",
+                exc,
+                extra={"error_type": type(exc).__name__},
+            )
             return 1
         except FileNotFoundError as exc:
-            logger.error("Source error: %s", exc)
+            logger.error(
+                "Source error: %s",
+                exc,
+                extra={"error_type": type(exc).__name__},
+            )
             return 1
-        except Exception:
-            logger.exception("Unexpected error during sync.")
+        except Exception as exc:
+            logger.exception(
+                "Unexpected error during sync.",
+                extra={"error_type": type(exc).__name__},
+            )
             return 1
 
         logger.info(
@@ -175,5 +190,17 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
             result["updated"],
             result["failed"],
             len(records),
+            extra={
+                # "created" alone collides with LogRecord's own
+                # creation-timestamp attribute of the same name —
+                # logging.Logger.makeRecord() raises KeyError on any
+                # extra= key that shadows an existing LogRecord
+                # attribute, so every field here is prefixed to stay
+                # clear of the standard attribute set entirely.
+                "records_created": result["created"],
+                "records_updated": result["updated"],
+                "records_failed": result["failed"],
+                "total_records": len(records),
+            },
         )
         return 1 if result["failed"] else 0

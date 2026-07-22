@@ -197,12 +197,17 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
                 key_value,
                 type(exc).__name__,
                 exc,
+                extra={
+                    self.dedupe_key: key_value,
+                    "exception_type": type(exc).__name__,
+                },
             )
             if breaker.record_failure():
                 logger.error(
                     "Circuit breaker tripped after %d consecutive "
                     "failures; skipping remaining records.",
                     self._failure_threshold,
+                    extra={"failure_threshold": self._failure_threshold},
                 )
             return "failed"
 

@@ -598,6 +598,43 @@ constructor parameter accepting a third-party or sealed class: define
 the narrow shape actually used, type against that, and let both the
 real class and any test double satisfy it independently.
 
+### Structured Logging: JSON Lines vs. a Human-Formatted String
+
+`lag_service_kit.logging.configure_logging()`: A log-aggregation
+platform (Azure Monitor Log Analytics, Datadog, ELK/Splunk) needs to
+filter, alert, and dashboard on individual fields without a custom parsing 
+rule.
+
+**The implementation:** `lag_service_kit.logging.JsonFormatter` renders each
+record as one self-describing JSON object per line — `timestamp`,
+`level`, `logger`, `message`, an `exception` key with the formatted
+traceback when one is present, plus every field a call site attaches
+via `extra=`. Existing call sites in `BaseSyncRunner.run()` and
+`BaseODataInventorySyncRunner._upsert_one()` pass their contextual data 
+(`sku_id`, `exception_type`, per-run record counts) through `extra=` 
+instead of folding it into the message string, so
+each becomes an independently queryable JSON key.
+
+**A real constraint surfaced while building this, worth recording:**
+`extra={"created": ...}` raises `KeyError` at the logging call itself
+— `created` collides with `logging.LogRecord`'s own creation-timestamp
+attribute, and `logging.Logger.makeRecord()` rejects any `extra=` key
+that shadows an existing `LogRecord` attribute before `JsonFormatter`
+ever runs. Colliding fields are prefixed (e.g., `records_created`, 
+`records_updated`, `records_failed`) to account for this. The same 
+discipline applies to any future call site: a domain-specific or prefixed 
+key name, never a bare word that might already mean something 
+to `logging` itself.
+
+A per-run correlation ID (tagging every log line from one execution,
+so parallel or scheduled runs stay distinguishable in aggregated
+storage) is a deliberate non-goal here — it would require threading a
+`run_id` through `sync_records()`/`upsert_record()` signatures across
+the runner hierarchy, a real API surface change under this repo's
+layering directives (see Architectural Directive 4), not a
+same-file logging enhancement. Noted as a candidate follow-up, not
+folded in silently.
+
 ### Monorepo Dependency Resolution: Install Order vs. a Private Feed
 
 `lag-service-kit`'s `pyproject.toml` declares `lag-data-utils>=1.0.0`
@@ -1002,10 +1039,10 @@ application user registered for the target Entra ID app.
    python3 dataverse_sync_runner.py
    ```
 
-   A healthy run logs a single structured line and exits `0`:
+   A healthy run logs a single JSON line and exits `0`:
 
-   ```text
-   2026-07-09T10:07:26-0400 | INFO     | lag_service_kit.runners.base | Sync complete: 0 created, 100 updated, 0 failed (of 100 records).
+   ```json
+   {"timestamp": "2026-07-22T10:07:26-0400", "level": "INFO", "logger": "lag_service_kit.runners.base", "message": "Sync complete: 0 created, 100 updated, 0 failed (of 100 records).", "records_created": 0, "records_updated": 100, "records_failed": 0, "total_records": 100}
    ```
 
    Missing configuration, a rejected credential, or a per-record HTTP
