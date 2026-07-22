@@ -65,3 +65,48 @@ def test_settings_satisfy_lag_data_utils_protocol_structurally(
     settings = InventorySyncSettings()
 
     assert isinstance(settings, ClientSideProtocol)
+
+
+@pytest.mark.integration
+def test_settings_resolve_all_four_dataverse_fields_from_key_vault(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """InventorySyncSettings itself, not just a test-local stand-in,
+
+    pulls all four Dataverse connection fields from Key Vault when
+    AZURE_KEY_VAULT_URL is set — proving the real composed settings
+    class actually wires up DataverseConnectionSettings's
+    vault_secret_fields correctly, not only BaseServiceSettings's
+    mechanism in isolation (see test_settings.py for that).
+    """
+
+    class _FakeKeyVaultSource:
+        def __init__(self, settings_cls: type, vault_url: str) -> None:
+            pass
+
+        def __call__(self) -> dict:  # type: ignore[type-arg]
+            return {
+                "azure_tenant_id": "vault-tenant-id",
+                "azure_client_id": "vault-client-id",
+                "azure_client_secret": "vault-client-secret",
+                "dataverse_url": "https://vault-org.crm.dynamics.com",
+            }
+
+    monkeypatch.setattr(
+        "lag_service_kit.settings.AzureKeyVaultSettingsSource",
+        _FakeKeyVaultSource,
+    )
+    monkeypatch.setenv("AZURE_KEY_VAULT_URL", "https://fake.vault.azure.net/")
+    # Deliberately not set — proving the four values below come from
+    # Key Vault, not a coincidentally-matching real environment variable.
+    monkeypatch.delenv("AZURE_TENANT_ID", raising=False)
+    monkeypatch.delenv("AZURE_CLIENT_ID", raising=False)
+    monkeypatch.delenv("AZURE_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("DATAVERSE_URL", raising=False)
+
+    settings = InventorySyncSettings()
+
+    assert settings.azure_tenant_id == "vault-tenant-id"
+    assert settings.azure_client_id == "vault-client-id"
+    assert settings.azure_client_secret == "vault-client-secret"
+    assert settings.dataverse_url == "https://vault-org.crm.dynamics.com"

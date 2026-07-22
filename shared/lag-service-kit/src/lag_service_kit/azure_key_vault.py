@@ -1,6 +1,6 @@
 """Azure Key Vault as a pydantic-settings source, for any LAG service."""
 
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, Dict, Optional, Protocol, Tuple, Type
 
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
@@ -8,8 +8,67 @@ from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 
+class _SecretValue(Protocol):
+    """The one attribute this source reads off a fetched secret.
+
+    Deliberately not ``azure.keyvault.secrets.KeyVaultSecret`` — that
+    would tie this shape to one SDK's concrete return type. Any object
+    exposing ``.value`` satisfies this, real or faked, from Key Vault
+    or any other secret store.
+
+    ``value`` is typed ``Optional[str]``, matching the real
+    ``KeyVaultSecret.value`` exactly, because a secret can exist
+    without a value (e.g. a disabled or soft-deleted version) — the
+    SDK models that possibility instead of guaranteeing a string, and
+    this Protocol has to accept the same possibility to structurally
+    match it.
+
+    Declared as a read-only ``@property`` rather than a plain
+    attribute: the real ``KeyVaultSecret.value`` is itself a read-only
+    property, and a Protocol plain-attribute member requires the
+    implementer's attribute be both gettable *and* settable. A
+    settable fake (e.g. ``SimpleNamespace(value=...)``) still
+    satisfies a read-only requirement — read-write is a superset of
+    read-only — so nothing about the test doubles needs to change.
+    """
+
+    @property
+    def value(self) -> Optional[str]:
+        """Return the secret's value, or ``None`` if it has none."""
+        ...
+
+
+class _SecretClientLike(Protocol):
+    """The one capability this source needs from a secret client.
+
+    Satisfied structurally by the real
+    ``azure.keyvault.secrets.SecretClient`` and by any test double
+    exposing this one method — this source depends on the shape, not
+    on the concrete (sealed, third-party) SDK class, matching this
+    repo's standing preference for ``typing.Protocol`` over
+    inheritance (see README.md's "Protocols Over Inheritance, Even for
+    Test Doubles" section).
+    """
+
+    def get_secret(self, name: str) -> _SecretValue:
+        """Fetch one secret by name.
+
+        Parameters
+        ----------
+        name : str
+            The secret's name in Key Vault.
+
+        Returns
+        -------
+        _SecretValue
+            An object exposing a ``.value`` attribute with the secret's
+            string value.
+        """
+        ...
+
+
 class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
-    """Resolves declared fields from Azure Key Vault, any other fields not at all.
+    """Resolves declared fields from Azure Key Vault.
 
     A ``pydantic_settings.PydanticBaseSettingsSource`` implementation —
     the same extension point ``BaseSettings`` already uses internally
@@ -38,7 +97,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         self,
         settings_cls: Type[BaseSettings],
         vault_url: str,
-        secret_client: Optional[SecretClient] = None,
+        secret_client: Optional[_SecretClientLike] = None,
     ) -> None:
         """Bind this source to a Key Vault, or an injected fake for testing.
 
@@ -50,10 +109,13 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         vault_url : str
             The target Key Vault's URL (e.g.,
             ``"https://my-vault.vault.azure.net/"``).
-        secret_client : SecretClient, optional
+        secret_client : _SecretClientLike, optional
             An existing client to use instead of constructing a real
             one — the seam a test replaces with a fake, so no test
-            ever needs a real Azure credential or network call.
+            ever needs a real Azure credential or network call. Typed
+            structurally rather than as the concrete ``SecretClient``
+            so any object with a matching ``get_secret()`` works, with
+            no inheritance relationship required.
             Defaults to a real ``SecretClient`` authenticated via
             ``DefaultAzureCredential``.
 
@@ -62,7 +124,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         None
         """
         super().__init__(settings_cls)
-        self._client = secret_client or SecretClient(
+        self._client: _SecretClientLike = secret_client or SecretClient(
             vault_url=vault_url, credential=DefaultAzureCredential()
         )
 

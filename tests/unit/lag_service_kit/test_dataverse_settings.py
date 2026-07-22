@@ -78,3 +78,19 @@ def test_trailing_slash_is_stripped_from_dataverse_url(
         dataverse_url="https://org.crm.dynamics.com/",
     )
     assert settings.dataverse_url == "https://org.crm.dynamics.com"
+
+
+def test_all_four_connection_values_are_vault_backed() -> None:
+    """Every field is vault-backed, not just azure_client_secret.
+
+    In a public repository, the tenant ID, client ID, and Dataverse
+    URL are real reconnaissance value even though none of them are
+    credentials on their own — see README.md's "Secrets Management"
+    section for why this covers all four, not just the one true secret.
+    """
+    assert DataverseConnectionSettings.vault_secret_fields == (
+        "azure_tenant_id",
+        "azure_client_id",
+        "azure_client_secret",
+        "dataverse_url",
+    )

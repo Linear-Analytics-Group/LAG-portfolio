@@ -507,6 +507,97 @@ Scalability to support simultaneous mappings from a single deployment
 may require a shift to declarative-file configuration, provided that
 framework provides the necessary guardrails to prevent data corruption.
 
+### Protocols Over Inheritance, Even for Test Doubles
+
+A recurring choice throughout this codebase, made explicit here rather
+than left to be inferred file by file: whenever a piece of code needs
+to accept "something that behaves like X," it is typed against a
+`typing.Protocol` describing only the behavior actually used, never
+against a concrete class — including when "something that behaves
+like X" is a unit test's fake.
+
+**Where this already applied before Key Vault existed:**
+`DataverseClient.from_settings()` takes a `DataverseConnectionSettings`
+Protocol, not a concrete Pydantic settings class (see "`from_settings()`
+and structural typing" above); `sources/base.py:InventorySource` and
+`ChunkedInventorySource` let any object with the right method(s) act
+as a runner's source, with zero base class to inherit from (see
+"Runtime Checkable Protocols" above).
+
+**Where this showed up again, and why it's the SOLID-correct choice
+even under pressure not to be:**
+`lag_service_kit.azure_key_vault.AzureKeyVaultSettingsSource` needs a
+Key Vault client to fetch secrets. The obvious signature types that
+parameter as the real `azure.keyvault.secrets.SecretClient` — but a
+unit test then has to pass in a fake, and mypy `--strict` correctly
+rejects a fake that doesn't nominally inherit from `SecretClient` as
+an incompatible argument type.
+
+Two tempting fixes were rejected:
+
+* **Subclassing the real `SecretClient`** to produce a compatible
+  fake. `SecretClient` is a sealed, third-party Azure SDK class whose
+  constructor performs real credential/transport setup — inheriting
+  from it just to satisfy a type checker couples the test double to
+  Azure SDK internals it has no business depending on, and violates
+  the Liskov Substitution Principle in spirit even if mypy would
+  technically allow it (a fake is not actually substitutable for
+  everything a real `SecretClient` does).
+* **`# type: ignore[arg-type]` at every call site.** This suppresses
+  the specific error mypy raised without addressing why it was raised
+  — the parameter's declared type still says "must be this concrete
+  Azure class," which remains true (and wrong) everywhere else that
+  type gets read or reasoned about, not just at the suppressed lines.
+
+**The fix:** two minimal `typing.Protocol` definitions, local to
+`azure_key_vault.py` —
+
+```python
+class _SecretValue(Protocol):
+    @property
+    def value(self) -> Optional[str]: ...
+
+class _SecretClientLike(Protocol):
+    def get_secret(self, name: str) -> _SecretValue: ...
+```
+
+— and `AzureKeyVaultSettingsSource.__init__`'s `secret_client`
+parameter is typed against `_SecretClientLike`, not `SecretClient`.
+The real `SecretClient` satisfies this automatically (it has a
+matching `get_secret()`); a test's fake satisfies it too, with no
+inheritance relationship between the two at all. Neither class knows
+the Protocol exists.
+
+Two details were load-bearing enough to get wrong on the first pass,
+worth recording so they aren't relearned the hard way:
+
+* **`_SecretValue.value` had to be `Optional[str]`, not `str`.** The
+  real `KeyVaultSecret.value` is itself `Optional[str]` (a secret
+  version can exist without a value — e.g. disabled or soft-deleted).
+  A Protocol narrower than the real type it's supposed to describe
+  will always reject the real type as a structural mismatch; the
+  Protocol must describe the type honestly, not the type this code
+  happens to expect on the happy path.
+* **`_SecretValue.value` had to be declared as a read-only
+  `@property`, not a plain attribute.** A Protocol plain attribute
+  means "gettable and settable"; the real `KeyVaultSecret.value` is a
+  read-only property, so a plain-attribute Protocol member rejects it
+  as a mismatch even once the type itself is correct. A settable fake
+  attribute still satisfies a read-only Protocol requirement (read-write
+  is a superset of read-only) — the fix only needed to flow one
+  direction.
+
+**Why this is the durable pattern, not a one-off:** structural typing
+here is a direct expression of the Dependency Inversion Principle —
+this code depends on an abstraction it owns (`_SecretClientLike`), not
+on a concrete detail owned by a third party (`SecretClient`) — and of
+the Interface Segregation Principle, since the Protocol exposes
+exactly the one method actually called, nothing a full `SecretClient`
+also happens to expose. The same reasoning applies to any future
+constructor parameter accepting a third-party or sealed class: define
+the narrow shape actually used, type against that, and let both the
+real class and any test double satisfy it independently.
+
 ### Monorepo Dependency Resolution: Install Order vs. a Private Feed
 
 `lag-service-kit`'s `pyproject.toml` declares `lag-data-utils>=1.0.0`

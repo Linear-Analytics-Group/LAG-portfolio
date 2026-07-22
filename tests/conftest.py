@@ -22,6 +22,7 @@ DATAVERSE_ENV_VARS: List[str] = [
     "AZURE_CLIENT_SECRET",
     "DATAVERSE_URL",
     "LOG_LEVEL",
+    "AZURE_KEY_VAULT_URL",
 ]
 
 FAKE_ENVIRONMENT_URL: str = "https://faketestorg.crm.dynamics.com"

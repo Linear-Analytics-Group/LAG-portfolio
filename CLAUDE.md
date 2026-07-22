@@ -192,6 +192,39 @@ in this repo. They are not advisory.
    protocol, source format, or service — modularity and scalability take
    precedence over the shortest path to a working single-destination
    implementation.
+5. **Prefer `typing.Protocol` (structural typing) over inheritance
+   whenever a piece of code just needs "something that behaves like
+   X."** This is the Dependency Inversion Principle in practice: code
+   should depend on an abstraction it owns, not a concrete detail
+   owned elsewhere — and the Interface Segregation Principle, since a
+   Protocol should expose only the members actually used, not
+   everything the real class also happens to expose. Established
+   precedent already in this codebase: `DataverseConnectionSettings`
+   (`lag_data_utils.clients.dataverse`) lets `DataverseClient.from_settings()`
+   accept any settings object with the right four attributes, with no
+   import of a concrete settings class; `sources/base.py:InventorySource`
+   and `ChunkedInventorySource` let any object with the right method(s)
+   act as a runner's source, with nothing to subclass.
+
+   This applies to constructor parameters accepting a third-party or
+   sealed SDK class just as much as to in-house types — e.g.
+   `lag_service_kit.azure_key_vault.AzureKeyVaultSettingsSource`'s
+   `secret_client` parameter is typed against a local
+   `_SecretClientLike` Protocol, not the concrete
+   `azure.keyvault.secrets.SecretClient`. Do not "fix" a unit test
+   fake failing a type check by making the fake subclass the real
+   (often sealed, third-party) class, and do not silence the error
+   with `# type: ignore` — both leave the underlying coupling in
+   place. Define the narrow Protocol the code actually needs instead;
+   the real class and any test double then satisfy it independently,
+   with zero inheritance relationship between them. See README.md's
+   "Protocols Over Inheritance, Even for Test Doubles" section for the
+   worked example, including two structural-typing pitfalls to watch
+   for: a Protocol member must match the real type's optionality
+   exactly (narrower than the real type it describes will reject the
+   real type), and a read-only `@property` on the real class needs a
+   read-only `@property` on the Protocol too, not a plain attribute
+   (a plain Protocol attribute demands read *and* write).
 
 ## Style and Linting Directives
 
