@@ -17,6 +17,7 @@ import pandas as pd
 import pytest
 from lag_data_utils.clients.base import AuthenticationError, BaseClient
 from lag_service_kit.runners import BaseSyncRunner
+from lag_service_kit.validation import RecordValidationError
 from pydantic import BaseModel, ValidationError
 
 pytestmark = pytest.mark.unit
@@ -156,6 +157,28 @@ def test_run_reports_a_source_error_when_load_records_raises(
 
     assert exit_code == 1
     assert "Source error" in capsys.readouterr().out
+
+
+def test_run_reports_a_data_validation_error_distinctly(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A malformed feed is reported distinctly, not as a generic bug.
+
+    Mirrors the FileNotFoundError/"Source error" test above: a
+    RecordValidationError from load_records() gets its own clear,
+    logged category rather than falling into the generic "Unexpected
+    error during sync." branch.
+    """
+
+    class _MalformedFeedRunner(_RecordingRunner):
+        def load_records(self) -> pd.DataFrame:
+            self.calls.append("load_records")
+            raise RecordValidationError("Missing required column(s): sku_id.")
+
+    exit_code = _MalformedFeedRunner().run()
+
+    assert exit_code == 1
+    assert "Data validation error" in capsys.readouterr().out
 
 
 def test_run_reports_unexpected_errors_instead_of_crashing(

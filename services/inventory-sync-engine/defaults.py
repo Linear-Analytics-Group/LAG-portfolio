@@ -15,6 +15,14 @@ different destination never risks inheriting an unrelated schema.
 #: construction time (see ``runners.base.InventoryDomainMixin``).
 DEDUPE_KEY: str = "sku_id"
 
+#: Columns (besides ``DEDUPE_KEY``, always required separately) that
+#: every inventory record must carry, regardless of source feed format
+#: or destination system — this is what makes a row "an inventory
+#: record" at all (see ``runners.base.InventoryDomainMixin.load_records()``).
+#: A customer whose source feed uses different column names overrides
+#: this at construction time, the same as ``DEDUPE_KEY``.
+DEFAULT_REQUIRED_COLUMNS: tuple[str, ...] = ("item_name", "unit_price")
+
 #: Worker threads used to sync records concurrently (see
 #: ``runners.odata.BaseODataInventorySyncRunner``). This workload is
 #: I/O-bound (waiting on HTTP responses), so threads give real

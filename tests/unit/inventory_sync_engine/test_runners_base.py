@@ -10,6 +10,7 @@ from typing import Iterator, List
 
 import pandas as pd
 import pytest
+from lag_service_kit.validation import RecordValidationError
 from runners.base import DEDUPE_KEY, InventoryDomainMixin
 
 pytestmark = pytest.mark.unit
@@ -225,3 +226,91 @@ def test_constructor_cooperates_with_a_sibling_base_via_super() -> None:
 
     assert runner.source is source
     assert runner.protocol_base_initialized is True
+
+
+def test_default_required_columns_are_item_name_and_unit_price() -> None:
+    """With no override, required_columns matches the shipped default."""
+    from defaults import DEFAULT_REQUIRED_COLUMNS
+
+    mixin = InventoryDomainMixin(source=_StubSource(pd.DataFrame()))
+    assert mixin.required_columns == DEFAULT_REQUIRED_COLUMNS
+    assert DEFAULT_REQUIRED_COLUMNS == ("item_name", "unit_price")
+
+
+def test_load_records_raises_when_a_required_column_is_missing() -> None:
+    """A feed missing unit_price fails clearly, before dedup runs."""
+    raw = pd.DataFrame([{"sku_id": "SKU-001", "item_name": "Widget"}])
+    mixin = InventoryDomainMixin(source=_StubSource(raw))
+
+    with pytest.raises(RecordValidationError) as exc_info:
+        mixin.load_records()
+
+    assert "unit_price" in str(exc_info.value)
+
+
+def test_load_records_raises_when_the_dedupe_key_is_missing_entirely() -> None:
+    """A feed missing the business-key column itself is also caught."""
+    raw = pd.DataFrame([{"item_name": "Widget", "unit_price": 9.99}])
+    mixin = InventoryDomainMixin(source=_StubSource(raw))
+
+    with pytest.raises(RecordValidationError) as exc_info:
+        mixin.load_records()
+
+    assert "sku_id" in str(exc_info.value)
+
+
+def test_load_records_raises_when_the_dedupe_key_has_a_null_value() -> None:
+    """A blank sku_id is rejected, since it can't identify a record."""
+    raw = pd.DataFrame(
+        [
+            {"sku_id": "SKU-001", "item_name": "Widget", "unit_price": 9.99},
+            {"sku_id": None, "item_name": "Gadget", "unit_price": 4.00},
+        ]
+    )
+    mixin = InventoryDomainMixin(source=_StubSource(raw))
+
+    with pytest.raises(RecordValidationError) as exc_info:
+        mixin.load_records()
+
+    assert "sku_id" in str(exc_info.value)
+    assert "1 row" in str(exc_info.value)
+
+
+def test_required_columns_override_changes_what_is_checked() -> None:
+    """A customer's own schema can name different required columns."""
+    raw = pd.DataFrame([{"sku_id": "SKU-001", "warehouse_code": "W1"}])
+    mixin = InventoryDomainMixin(
+        source=_StubSource(raw), required_columns=("warehouse_code",)
+    )
+
+    records = mixin.load_records()
+
+    assert len(records) == 1
+
+
+def test_load_records_raises_for_a_bad_chunk_before_reading_more() -> None:
+    """A bad chunk fails validation before the next chunk is read.
+
+    Proves validation runs per chunk, as each arrives, rather than
+    only after every chunk has already been pulled from the source.
+    """
+    good_chunk = pd.DataFrame(
+        [{"sku_id": "SKU-001", "item_name": "Widget", "unit_price": 9.99}]
+    )
+    bad_chunk = pd.DataFrame([{"sku_id": "SKU-002"}])
+
+    class _StoppingChunkedSource(_StubChunkedSource):
+        def read_record_chunks(
+            self, chunksize: int
+        ) -> Iterator[pd.DataFrame]:
+            yield good_chunk
+            yield bad_chunk
+            raise AssertionError(
+                "a chunk after the malformed one should never be read"
+            )
+
+    source = _StoppingChunkedSource([])
+    mixin = InventoryDomainMixin(source=source, chunksize=1)
+
+    with pytest.raises(RecordValidationError):
+        mixin.load_records()

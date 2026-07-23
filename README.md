@@ -635,6 +635,55 @@ layering directives (see Architectural Directive 4), not a
 same-file logging enhancement. Noted as a candidate follow-up, not
 folded in silently.
 
+### Ingest Validation: Fail Fast on a Malformed Feed, Not Deep in Dedup
+
+Without validation, a column missing from a malformed feed surfaces
+as a raw `KeyError` inside `pandas.DataFrame.drop_duplicates` or an
+`AttributeError` inside `itertuples()`, several calls away from
+where the real problem lies — a blank business key from the source
+flowing straight through dedup and into a destination write as a
+literal alternate-key value.
+
+**Pre-flight validation:** `lag_service_kit.validation` adds two
+small, generic checks — `require_columns` (every named column
+exists) and `require_non_null` (a given column has no null/blank
+value) — plus `RecordValidationError`, the exception type they
+raise. `InventoryDomainMixin.load_records()` calls both, via a
+private `_validate()` helper, immediately after reading and before
+dedup, for both the plain and chunked read paths (a malformed chunk
+fails before the *next* chunk is even pulled from the source, not
+only after every chunk has already been read). Required columns are
+constructor injected (`required_columns`, defaulting to
+`defaults.DEFAULT_REQUIRED_COLUMNS`), matching this repo's standing
+"Constructor Injection vs. Environment Bloat" pattern rather than a
+hardcoded list.
+
+**Where the exception type lives, and why:** `RecordValidationError`
+is defined in `lag_service_kit` (generic scaffolding), not in the
+inventory service, even though only the inventory service raises it
+today. This mirrors `AuthenticationError`'s placement in the generic
+transport layer (`lag_data_utils`) rather than a Dataverse-specific
+module: it lets `lag_service_kit.runners.base.BaseSyncRunner.run()`
+catch it — alongside `pydantic.ValidationError` and
+`AuthenticationError`, logged as "Data validation error" rather than
+falling into `run()`'s generic "unexpected error" branch — without
+`lag_service_kit` importing anything inventory-specific to do so. A
+second service built later could raise the same exception type for
+its own validation rules and get the same treatment for free; that's
+a byproduct of where the class lives, not something wired up for a
+second service today.
+
+**Deliberately not built:** validating business-rule semantics (e.g.,
+is `unit_price` non-negative, does it look like a real currency
+value) rather than structural shape (columns present, key non-null)
+is a full schema-validation framework's job (e.g., `pandera`,
+`great_expectations`) — building one for a three-column schema with
+one destination would be the same premature abstraction this README
+already declined for field mapping (see "Field Mapping" above); the
+two checks here cover the failure modes that turn into an opaque
+crash or a corrupted alternate key, not every possible data-quality
+rule a real deployment might eventually want.
+
 ### Monorepo Dependency Resolution: Install Order vs. a Private Feed
 
 `lag-service-kit`'s `pyproject.toml` declares `lag-data-utils>=1.0.0`

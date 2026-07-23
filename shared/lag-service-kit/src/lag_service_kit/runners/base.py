@@ -8,8 +8,8 @@ import pandas as pd
 from pydantic import ValidationError
 
 from lag_data_utils.clients.base import AuthenticationError, BaseClient
-
-from ..logging import configure_logging
+from lag_service_kit.logging import configure_logging
+from lag_service_kit.validation import RecordValidationError
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -173,6 +173,13 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
         except FileNotFoundError as exc:
             logger.error(
                 "Source error: %s",
+                exc,
+                extra={"error_type": type(exc).__name__},
+            )
+            return 1
+        except RecordValidationError as exc:
+            logger.error(
+                "Data validation error: %s",
                 exc,
                 extra={"error_type": type(exc).__name__},
             )

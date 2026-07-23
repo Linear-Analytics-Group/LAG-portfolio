@@ -228,6 +228,24 @@ in this repo. They are not advisory.
 
 ## Style and Linting Directives
 
+* **Absolute Imports:** Import a sibling module within the same package
+  by its full dotted path (`from lag_service_kit.logging import
+  configure_logging`), never by a relative import (`from ..logging
+  import configure_logging`). This does not require or imply exposing
+  a public API surface via a package's `__init__.py` — importing the
+  specific submodule directly (`lag_service_kit.logging`, not a
+  flat `lag_service_kit` re-export) remains the convention; only the
+  *path style* changes, from relative to absolute.
+* **Modern Generic Typing (PEP 585):** Annotate with the builtin
+  collection types directly (`tuple[str, ...]`, `list[int]`,
+  `dict[str, int]`) rather than importing `Tuple`/`List`/`Dict` from
+  `typing`. Supported natively since Python 3.9 (this repo's floor —
+  see `pyproject.toml`'s `requires-python`), so no import is needed
+  and none should be added. This applies only to the builtin
+  collection generics; `Optional`/`Union` still require `typing` (or
+  PEP 604's `X | Y`, which needs Python 3.10+ or `from __future__
+  import annotations` — out of scope until the Python-version
+  migration) and are unaffected by this directive.
 * **Line Length Limit:** All lines of code, comments, and docstrings must
   strictly stay within a maximum of 80 characters.
 * **Docstring Formatting:** Document all modules, classes, and public

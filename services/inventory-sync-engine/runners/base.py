@@ -11,13 +11,15 @@ regardless of write protocol.
 """
 
 import logging
-from typing import Any
+from typing import Any, Iterator
 
 import pandas as pd
 from lag_service_kit.dedupe import dedupe_last_seen, dedupe_last_seen_chunks
+from lag_service_kit.validation import require_columns, require_non_null
 
 from defaults import DEDUPE_KEY as DEDUPE_KEY
 from defaults import DEFAULT_CHUNK_SIZE
+from defaults import DEFAULT_REQUIRED_COLUMNS as DEFAULT_REQUIRED_COLUMNS
 from sources import ChunkedInventorySource, InventorySource
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -49,6 +51,7 @@ class InventoryDomainMixin:
         source: InventorySource,
         dedupe_key: str = DEDUPE_KEY,
         chunksize: int = DEFAULT_CHUNK_SIZE,
+        required_columns: tuple[str, ...] = DEFAULT_REQUIRED_COLUMNS,
         **kwargs: Any,
     ) -> None:
         """Bind this run to a source feed and its business-key column.
@@ -72,6 +75,15 @@ class InventoryDomainMixin:
             Row count per chunk when ``source`` also satisfies
             ``sources.ChunkedInventorySource``. Ignored otherwise.
             Defaults to :data:`~defaults.DEFAULT_CHUNK_SIZE`.
+        required_columns : tuple[str, ...]
+            Column names (besides ``dedupe_key``, always required
+            separately) that every record read from ``source`` must
+            carry. Checked by :meth:`load_records` before dedup, so a
+            malformed feed raises a clear
+            ``lag_service_kit.validation.RecordValidationError``
+            naming what's missing instead of an opaque failure deeper
+            in dedup or the destination write. Defaults to
+            :data:`~defaults.DEFAULT_REQUIRED_COLUMNS`.
         **kwargs : Any
             Forwarded, unexamined, to ``super().__init__()`` — see Notes.
 
@@ -94,6 +106,58 @@ class InventoryDomainMixin:
         self.source = source
         self.dedupe_key = dedupe_key
         self.chunksize = chunksize
+        self.required_columns = required_columns
+
+    def _validate(self, records: pd.DataFrame) -> pd.DataFrame:
+        """Check one batch of raw records against this run's schema.
+
+        Parameters
+        ----------
+        records : pd.DataFrame
+            Records read from :attr:`source`, not yet deduplicated —
+            a full read, or one chunk of a chunked read.
+
+        Returns
+        -------
+        pd.DataFrame
+            ``records``, unchanged — returned only so this method
+            composes into a chunk-generator pipeline (see
+            :meth:`load_records`).
+
+        Raises
+        ------
+        lag_service_kit.validation.RecordValidationError
+            If ``dedupe_key`` or any of :attr:`required_columns` is
+            missing, or if any row's ``dedupe_key`` value is null or
+            blank. Checked in that order, so a missing column is
+            always reported before a null-value check that could not
+            otherwise run against a column that isn't there.
+        """
+        require_columns(records, [self.dedupe_key, *self.required_columns])
+        require_non_null(records, self.dedupe_key)
+        return records
+
+    def _validated_chunks(
+        self, chunks: Iterator[pd.DataFrame]
+    ) -> Iterator[pd.DataFrame]:
+        """Validate each chunk of a chunked read as it arrives.
+
+        Parameters
+        ----------
+        chunks : Iterator[pd.DataFrame]
+            Successive row chunks from
+            ``sources.ChunkedInventorySource.read_record_chunks``.
+
+        Returns
+        -------
+        Iterator[pd.DataFrame]
+            The same chunks, each checked via :meth:`_validate` before
+            being yielded — so a malformed chunk raises before any
+            chunk after it is even read from the source, and before
+            ``dedupe_last_seen_chunks`` ever sees it.
+        """
+        for chunk in chunks:
+            yield self._validate(chunk)
 
     def load_records(self) -> pd.DataFrame:
         """Read this run's source feed and collapse duplicate SKU rows.
@@ -103,6 +167,17 @@ class InventoryDomainMixin:
         pd.DataFrame
             Deduplicated inventory records, with ``sku_id``, ``item_name``,
             and ``unit_price`` columns.
+
+        Raises
+        ------
+        lag_service_kit.validation.RecordValidationError
+            If the records read from :attr:`source` are missing
+            ``dedupe_key`` or any of :attr:`required_columns`, or if
+            any row's ``dedupe_key`` value is null or blank — before
+            dedup ever runs, so a malformed feed fails with a clear,
+            specific message instead of a ``KeyError`` deep inside
+            ``pandas.DataFrame.drop_duplicates`` or a bad alternate-key
+            value reaching the destination write.
 
         Notes
         -----
@@ -118,5 +193,8 @@ class InventoryDomainMixin:
         """
         if isinstance(self.source, ChunkedInventorySource):
             chunks = self.source.read_record_chunks(self.chunksize)
-            return dedupe_last_seen_chunks(chunks, key=self.dedupe_key)
-        return dedupe_last_seen(self.source.read_records(), key=self.dedupe_key)
+            return dedupe_last_seen_chunks(
+                self._validated_chunks(chunks), key=self.dedupe_key
+            )
+        records = self._validate(self.source.read_records())
+        return dedupe_last_seen(records, key=self.dedupe_key)
