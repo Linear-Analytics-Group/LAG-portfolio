@@ -1,8 +1,10 @@
 """Pydantic settings mixin for services that connect to Microsoft Dataverse."""
 
+import uuid
 from typing import ClassVar, Tuple
+from urllib.parse import urlparse
 
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -100,3 +102,75 @@ class DataverseConnectionSettings(BaseSettings):
             The URL with any trailing ``/`` removed.
         """
         return value.rstrip("/")
+
+    @field_validator("azure_tenant_id", "azure_client_id")
+    @classmethod
+    def _validate_guid(cls, value: str, info: ValidationInfo) -> str:
+        """Confirm this Entra ID identifier is a syntactically real GUID.
+
+        Parameters
+        ----------
+        value : str
+            The whitespace-stripped field value.
+        info : ValidationInfo
+            Supplies ``info.field_name``, so this one function can
+            name which of the two fields it's validating in its error
+            message rather than reporting a generic complaint.
+
+        Returns
+        -------
+        str
+            ``value``, unchanged — a GUID has no canonical casing or
+            formatting this validator needs to normalize.
+
+        Raises
+        ------
+        ValueError
+            If ``value`` isn't a syntactically valid GUID/UUID. Real
+            Entra ID tenant and application IDs are always GUIDs; a
+            typo'd or truncated value passes today's presence-only
+            check silently and only surfaces later as an opaque
+            MSAL/AADSTS authentication failure.
+        """
+        try:
+            uuid.UUID(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"{info.field_name} must be a valid GUID (e.g. "
+                f"'12345678-1234-1234-1234-123456789abc'), got "
+                f"{value!r}."
+            ) from exc
+        return value
+
+    @field_validator("dataverse_url")
+    @classmethod
+    def _validate_https_url(cls, value: str) -> str:
+        """Confirm dataverse_url is an absolute https:// URL.
+
+        Parameters
+        ----------
+        value : str
+            The whitespace-stripped, trailing-slash-stripped URL.
+
+        Returns
+        -------
+        str
+            ``value``, unchanged.
+
+        Raises
+        ------
+        ValueError
+            If ``value`` has no ``https`` scheme or no host — e.g. a
+            missing ``https://`` prefix, a plain ``http://`` URL, or a
+            bare hostname. A malformed value passes today's
+            presence-only check silently and only fails later, deep
+            inside HTTP request construction or MSAL's authority
+            setup, with a far less clear error.
+        """
+        parsed = urlparse(value)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError(
+                f"dataverse_url must be an absolute https:// URL "
+                f"(e.g. 'https://org.crm.dynamics.com'), got {value!r}."
+            )
+        return value

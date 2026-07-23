@@ -684,6 +684,64 @@ two checks here cover the failure modes that turn into an opaque
 crash or a corrupted alternate key, not every possible data-quality
 rule a real deployment might eventually want.
 
+### Config Validation: Format Checks, Not Just Presence Checks
+
+A value's presence is not enough for validation. A value could be
+non-empty and still nonsensical: a `LOG_LEVEL` typo, a
+`DATAVERSE_URL` missing its `https://` scheme, or an
+`AZURE_TENANT_ID` that isn't a real GUID.
+
+```
+settings accepted log_level: 'NOT_A_REAL_LEVEL'
+downstream issue at runtime: ValueError Unable to configure root logger
+```
+
+That `ValueError` is raised deep inside
+`lag_service_kit.logging.configure_logging()`, not by pydantic — and
+critically, `pydantic.ValidationError` does **not** catch a plain
+`ValueError` (it's a subclass of `ValueError`, not the reverse).
+Without specific `except` clauses in `BaseSyncRunner.run()` these
+errors would simply be logged as "Unexpected error during sync" —
+the same miscategorization problem the "Ingest Validation" solves
+for bad source data, but here for a typo'd `.env` value.
+
+**Three targeted `field_validator`s, not one generic check:**
+
+* `BaseServiceSettings._validate_log_level` checks `log_level`
+  against a fixed set of real `logging` level names
+  (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`), normalizing to
+  uppercase. The valid set is written out explicitly rather than
+  introspected from `logging`'s internals (`logging._nameToLevel` is
+  a private, underscore-prefixed implementation detail, not public
+  API) — this way the validator's behavior can't shift under a future
+  Python version that renames or restructures that private mapping.
+* `DataverseConnectionSettings._validate_guid` checks
+  `azure_tenant_id`/`azure_client_id` are syntactically valid GUIDs
+  via the standard-library `uuid.UUID(value)`, no new dependency.
+* `DataverseConnectionSettings._validate_https_url` checks
+  `dataverse_url` parses to an absolute `https://` URL with a real
+  host, via the standard-library `urllib.parse.urlparse`.
+
+**Why three small validators instead of one that branches on field
+name:** each check is conceptually distinct — a closed set of level
+names has nothing to do with GUID syntax, which has nothing to do
+with URL structure — so each gets its own single-purpose function,
+matching this codebase's existing `_strip_whitespace` /
+`_strip_trailing_slash` split in the same two classes. A validator
+shared across fields is reserved for logic that's genuinely identical
+regardless of which field it runs against (like whitespace-stripping
+already is); branching internally on `info.field_name` to run
+different logic per field would combine unrelated checks into one
+function body, harder to read and to test in isolation.
+
+**Real cost of this fix, paid once:** three existing test files
+constructed `DataverseConnectionSettings`/`InventorySyncSettings`
+with placeholder strings like `"tenant-id"` — those now fail GUID
+validation, exactly as they should. Each was updated to a
+syntactically valid but obviously fake GUID
+(`"12345678-1234-1234-1234-123456789abc"`-style), a one-time fixture
+update rather than a design compromise.
+
 ### Monorepo Dependency Resolution: Install Order vs. a Private Feed
 
 `lag-service-kit`'s `pyproject.toml` declares `lag-data-utils>=1.0.0`

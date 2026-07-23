@@ -13,9 +13,16 @@ from lag_data_utils.clients.dataverse import (
 )
 
 
+#: Syntactically valid but obviously fake GUIDs — real Entra ID
+#: tenant/client IDs are always GUIDs, so DataverseConnectionSettings'
+#: _validate_guid rejects plain placeholder strings now.
+FAKE_TENANT_ID = "11111111-1111-1111-1111-111111111111"
+FAKE_CLIENT_ID = "22222222-2222-2222-2222-222222222222"
+
+
 def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AZURE_TENANT_ID", "test-tenant-id")
-    monkeypatch.setenv("AZURE_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("AZURE_TENANT_ID", FAKE_TENANT_ID)
+    monkeypatch.setenv("AZURE_CLIENT_ID", FAKE_CLIENT_ID)
     monkeypatch.setenv("AZURE_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv("DATAVERSE_URL", "https://test-org.crm.dynamics.com/")
 
@@ -30,8 +37,8 @@ def test_settings_compose_dataverse_and_service_fields(
 
     settings = InventorySyncSettings()
 
-    assert settings.azure_tenant_id == "test-tenant-id"
-    assert settings.azure_client_id == "test-client-id"
+    assert settings.azure_tenant_id == FAKE_TENANT_ID
+    assert settings.azure_client_id == FAKE_CLIENT_ID
     assert settings.azure_client_secret == "test-client-secret"
     # Trailing slash stripped.
     assert settings.dataverse_url == "https://test-org.crm.dynamics.com"
@@ -86,8 +93,8 @@ def test_settings_resolve_all_four_dataverse_fields_from_key_vault(
 
         def __call__(self) -> dict:  # type: ignore[type-arg]
             return {
-                "azure_tenant_id": "vault-tenant-id",
-                "azure_client_id": "vault-client-id",
+                "azure_tenant_id": "33333333-3333-3333-3333-333333333333",
+                "azure_client_id": "44444444-4444-4444-4444-444444444444",
                 "azure_client_secret": "vault-client-secret",
                 "dataverse_url": "https://vault-org.crm.dynamics.com",
             }
@@ -106,7 +113,7 @@ def test_settings_resolve_all_four_dataverse_fields_from_key_vault(
 
     settings = InventorySyncSettings()
 
-    assert settings.azure_tenant_id == "vault-tenant-id"
-    assert settings.azure_client_id == "vault-client-id"
+    assert settings.azure_tenant_id == "33333333-3333-3333-3333-333333333333"
+    assert settings.azure_client_id == "44444444-4444-4444-4444-444444444444"
     assert settings.azure_client_secret == "vault-client-secret"
     assert settings.dataverse_url == "https://vault-org.crm.dynamics.com"

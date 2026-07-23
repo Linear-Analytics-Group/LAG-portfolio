@@ -8,6 +8,7 @@ from typing import Any, ClassVar, Dict, Tuple
 
 import pytest
 from lag_service_kit.settings import BaseServiceSettings, find_repo_env_file
+from pydantic import ValidationError
 from pydantic_settings import SettingsConfigDict
 
 pytestmark = pytest.mark.unit
@@ -59,6 +60,33 @@ def test_log_level_strips_surrounding_whitespace(
 ) -> None:
     """A LOG_LEVEL value with stray whitespace is trimmed before validation."""
     monkeypatch.setenv("LOG_LEVEL", "  DEBUG  ")
+    settings = BaseServiceSettings()
+    assert settings.log_level == "DEBUG"
+
+
+def test_log_level_rejects_an_unrecognized_value(
+    clean_env: pytest.MonkeyPatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A typo'd LOG_LEVEL fails at settings-construction time, clearly.
+
+    Before this validator existed, a value like this passed settings
+    construction silently and only crashed later, deep inside
+    configure_logging(), as a plain ValueError that BaseSyncRunner.run()
+    could not catch under its ValidationError branch.
+    """
+    monkeypatch.setenv("LOG_LEVEL", "NOT_A_REAL_LEVEL")
+
+    with pytest.raises(ValidationError) as exc_info:
+        BaseServiceSettings()
+
+    assert "log_level" in str(exc_info.value)
+
+
+def test_log_level_is_normalized_to_uppercase(
+    clean_env: pytest.MonkeyPatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lowercase but otherwise valid LOG_LEVEL is stored uppercased."""
+    monkeypatch.setenv("LOG_LEVEL", "debug")
     settings = BaseServiceSettings()
     assert settings.log_level == "DEBUG"
 

@@ -8,6 +8,19 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 from .azure_key_vault import AzureKeyVaultSettingsSource
 
+#: The only level names ``logging.config.dictConfig`` accepts. Not
+#: read from ``logging`` itself (its name-to-level mapping is a
+#: private implementation detail, not public API) — this is the
+#: standard, stable set every Python ``logging`` level name belongs
+#: to, deliberately excluding the deprecated aliases ``WARN``/``FATAL``.
+#: Writing this list out here, instead of introspecting ``logging``'s
+#: internals, helps ensure this validator's behavior can't shift under
+#: future Python version renames or restructures to that private
+#: mapping — this set only changes if we deliberately change it.
+_VALID_LOG_LEVELS: frozenset[str] = frozenset(
+    {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+)
+
 
 def find_repo_env_file(start: Path) -> Optional[Path]:
     """Walk upward from a starting file looking for a `.env` file.
@@ -91,6 +104,43 @@ class BaseServiceSettings(BaseSettings):
             The value with leading and trailing whitespace removed.
         """
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("log_level")
+    @classmethod
+    def _validate_log_level(cls, value: str) -> str:
+        """Confirm log_level names a real logging level, normalize case.
+
+        Parameters
+        ----------
+        value : str
+            The whitespace-stripped log level value.
+
+        Returns
+        -------
+        str
+            ``value``, uppercased, so every consumer of
+            ``settings.log_level`` sees one canonical form regardless
+            of how it was cased in the environment or `.env` file.
+
+        Raises
+        ------
+        ValueError
+            If ``value.upper()`` isn't one of
+            :data:`_VALID_LOG_LEVELS`. Raised here, at settings
+            construction time, rather than letting an invalid value
+            reach ``lag_service_kit.logging.configure_logging()`` —
+            which raises a plain ``ValueError`` of its own, not a
+            ``pydantic.ValidationError``, so it would otherwise fall
+            through every specific ``except`` clause in
+            ``BaseSyncRunner.run()`` and get logged as an "unexpected
+            error" instead of the clear configuration error it is.
+        """
+        if value.upper() not in _VALID_LOG_LEVELS:
+            raise ValueError(
+                f"log_level must be one of "
+                f"{sorted(_VALID_LOG_LEVELS)}, got {value!r}."
+            )
+        return value.upper()
 
     @classmethod
     def settings_customise_sources(
