@@ -59,6 +59,8 @@ jobs:
           services/inventory-sync-engine/defaults.py
           services/inventory-sync-engine/runners
           services/inventory-sync-engine/sources
+          services/inventory-sync-engine/run_mock_sync.py
+          services/inventory-sync-engine/test_connection.py
 
       - name: Test suite (tests/)
         run: pytest tests/ --cov --cov-report=term-missing

@@ -1,0 +1,16 @@
+# Source of intent for this service's full runtime dependency graph —
+# every package a shipped module directly imports, PLUS lag-data-utils
+# and lag-service-kit themselves (listed so pip-compile resolves
+# their own transitive dependencies too — e.g. pyarrow, azure-identity
+# — not so they end up pinned in the generated requirements.txt; see
+# the --unsafe-package flags in the regeneration command below).
+# Loose lower bounds here, same as any Python library — this file is
+# not what CI or a real deployment installs from; see README.md's
+# "Dependency Pinning" section for the exact regeneration command.
+requests>=2.31.0
+pandas>=2.2.0
+msal>=1.22.0
+pydantic>=2.7.0
+pydantic-settings>=2.4.0
+lag-data-utils>=1.0.0
+lag-service-kit>=1.0.0

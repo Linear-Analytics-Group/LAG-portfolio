@@ -13,7 +13,6 @@ secrets.toml
 # PROJECT SPECIFIC
 # ==============================================================================
 services/inventory-sync-engine/generate_mock_data.py
-services/inventory-sync-engine/test_connection.py
 
 # ==============================================================================
 # PYTHON & VIRTUAL ENVIRONMENTS

@@ -776,6 +776,59 @@ documented, understood tradeoff rather than a silent gap — the
 trigger to revisit it is a second internal consumer, a third install
 path, or any of this actually being published externally.
 
+### Dependency Pinning: Loose for Libraries, Locked for the Application
+
+The Python Packaging Authority draws a hard line between *libraries*
+and *applications*. `lag-data-utils` and `lag-service-kit` are
+libraries — installed alongside whatever else shares that
+environment. If they pinned tightly (e.g., `pandas==2.2.0`) and
+something else in that environment needed `pandas==2.3.1`, pip's
+resolver couldn't satisfy both. For packages, implementing lower
+bounds only helps prevent dependency conflicts of this nature.
+Conversely, applications (e.g., `services/inventory-sync-engine`)
+share nothing in their environments, so there's no resolver-conflict
+risk — what actually matters is reproducibility: the same versions
+installed today, next month, and in CI. A loose lower bound-only
+requirement doesn't provide that — a breaking release of any
+dependency could land silently on the next `pip install`, in CI or a
+real deployment, with zero code change and zero warning.
+
+**The Solution:** `requirements.in` (loose bounds, human-edited) plus
+a fully pinned, hash-verified `requirements.txt`, generated via
+[pip-tools](https://github.com/jazzband/pip-tools)'s `pip-compile` —
+additive on top of plain `pip`, not a replacement toolchain, matching
+this repo's own "Monorepo Dependency Resolution" call above to stay
+off `uv`/Poetry for now. Regenerate after changing `requirements.in`
+or either shared package's own dependencies:
+
+```bash
+python -m build --wheel ../../shared/lag-data-utils --outdir /tmp/lag-wheels
+python -m build --wheel ../../shared/lag-service-kit --outdir /tmp/lag-wheels
+pip-compile --generate-hashes --no-emit-find-links --no-header \
+  --find-links /tmp/lag-wheels \
+  --unsafe-package lag-data-utils --unsafe-package lag-service-kit \
+  --output-file=requirements.txt requirements.in
+```
+
+**Why `lag-data-utils`/`lag-service-kit` appear in `requirements.in`
+but never in the generated `requirements.txt`:** the lock needs to
+cover the *whole* deployed environment, not just the service's own
+direct imports — `lag-service-kit` alone pulls in `pyarrow`,
+`azure-identity`, and `azure-keyvault-secrets`, none of which the
+service imports directly. Listing the two shared packages in
+`requirements.in` (resolved via `--find-links` against freshly built
+wheels, since neither is published to a real index) lets `pip-compile`
+correctly compute *their* transitive dependencies too. Hash-pinning the
+two local packages would be unreliable: CI rebuilds their wheels
+fresh every run, and that build isn't guaranteed byte-for-byte
+reproducible, so a hash computed today could mismatch a wheel built
+tomorrow. `--unsafe-package` excludes them from the pinned output
+while still using them as resolution input — and this is safe
+specifically because CI's existing install order already installs
+both wheels *before* `requirements.txt`, so by the time the lock file
+is installed, pip finds them already present and never needs to
+resolve or hash-check them itself.
+
 ### Multi-Threaded Concurrency vs. OData v4 $batch
 
 To scale the execution speed of the sync engine beyond sequential, 
@@ -1032,8 +1085,9 @@ LAG-portfolio/
 │       │   ├── csv.py                        # CsvInventorySource — the only source that streams in chunks
 │       │   └── json.py                       # JsonInventorySource — the only JSON-specific code
 │       ├── requirements.txt
+│       ├── run_mock_sync.py                 # Zero-setup demo entrypoint — no .env, no Azure, no network
+│       ├── test_connection.py               # Real-environment connectivity smoke test — needs a filled .env
 │       ├── generate_mock_data.py            # Dev/test mock feed generator — git-ignored, excluded from mypy
-│       ├── test_connection.py               # MSAL/Dataverse connectivity smoke test — also git-ignored
 │       └── data/
 │           ├── erp_mock_inventory_data_feed.csv
 │           └── erp_mock_inventory_data_feed.json
@@ -1050,7 +1104,9 @@ LAG-portfolio/
 │       └── src/lag_service_kit/
 │           ├── settings.py                  # BaseServiceSettings, find_repo_env_file()
 │           ├── dataverse_settings.py        # DataverseConnectionSettings mixin
-│           ├── logging.py                   # configure_logging()
+│           ├── azure_key_vault.py            # AzureKeyVaultSettingsSource — optional Key Vault-backed fields
+│           ├── validation.py                 # RecordValidationError, require_columns(), require_non_null()
+│           ├── logging.py                   # configure_logging(), JsonFormatter
 │           ├── dedupe.py                     # dedupe_last_seen(), dedupe_last_seen_chunks()
 │           ├── circuit_breaker.py            # ConsecutiveFailureCircuitBreaker — any batch write loop
 │           ├── readers/                      # RecordReader, Csv (+ chunked)/Json/Parquet
@@ -1067,13 +1123,15 @@ LAG-portfolio/
     │                                          # DataverseInventorySyncRunner, CsvInventorySource
     ├── integration/                          # Real classes across a mocked network boundary
     └── acceptance/                           # Black-box: idempotency, operability, source/dest agnosticism,
-                                                # circuit breaker — one business requirement each
+                                                # circuit breaker, zero-setup mock demo — one requirement each
 ```
 
 ## Local environment setup
 
 **Prerequisites:** Python 3.9+, a Dataverse environment with an
-application user registered for the target Entra ID app.
+application user registered for the target Entra ID app — *unless*
+you just want to see the engine run: see "Zero-Setup Mock Execution"
+below, which needs neither.
 
 1. **Create and activate a virtual environment** at the repo root:
 
@@ -1090,6 +1148,11 @@ application user registered for the target Entra ID app.
    pip install -e ./shared/lag-service-kit
    pip install -r services/inventory-sync-engine/requirements.txt
    ```
+
+   `requirements.txt` is an exactly-pinned, hash-verified lock file,
+   not a loose requirements list — see "Dependency Pinning: Loose for
+   Libraries, Locked for the Application" below for why, and how to
+   regenerate it after a version bump.
 
    Editable installs mean `from lag_data_utils.clients.dataverse import
    DataverseClient` and `from lag_service_kit.settings import
@@ -1155,6 +1218,44 @@ application user registered for the target Entra ID app.
    Missing configuration, a rejected credential, or a per-record HTTP
    failure all log at `ERROR` and exit `1` — nothing is ever silently
    swallowed.
+
+### Zero-Setup Mock Execution
+
+Steps 1–4 above need a real Dataverse environment and Entra ID app
+registration. To see the engine run without either:
+
+```bash
+cd services/inventory-sync-engine
+python3 run_mock_sync.py
+```
+
+No `.env` file, no Azure credentials, and no network access at all —
+`run_mock_sync.py` runs the real
+`DataverseInventorySyncRunner`/`BaseSyncRunner` orchestration against
+the shipped mock CSV feed, with a fake Entra ID/Dataverse layer
+standing in for just the two things a real environment would
+otherwise provide: MSAL token acquisition and the destination's HTTP
+responses. Every other piece — dedup, the circuit breaker, the JSON
+structured logging, the idempotent-upsert loop — is the exact,
+unmodified production code path; nothing about how the engine
+actually runs is different from a real sync.
+
+The fake HTTP layer deterministically simulates a realistic mixed
+outcome — about 38% created, 60% updated, and 2% a transient failure
+— so the exit code is `1`, on purpose: this demonstrates the engine's
+per-record failure isolation and structured error logging (see
+"Circuit Breaker vs. Unconditional Retry Exhaustion" below), not a
+broken demo. The ~2% simulated failure rate is a deliberate, checked
+choice — comfortably under the circuit breaker's default
+`failure_threshold` of 5 total failures, so this demo can never trip
+it, regardless of dispatch order (see
+`tests/acceptance/test_mock_sync_demo.py`).
+
+For confirming a specific *real* Entra ID app registration and
+Dataverse environment are configured correctly — as opposed to seeing
+the engine run at all — see `test_connection.py`, the real-environment
+counterpart: same `InventorySyncSettings`/`DataverseClient` wiring,
+but requires a filled-in `.env` and real network access.
 
 ### Verification
 
