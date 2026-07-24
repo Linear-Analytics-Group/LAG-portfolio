@@ -228,6 +228,16 @@ in this repo. They are not advisory.
 
 ## Style and Linting Directives
 
+* **README as Finished Product:** Write `README.md` as a description
+  of the system's current, chosen design — as if it had always been
+  this way — never as a narrative of what was broken, what was
+  discovered, or how it was fixed. No "originally...", "this used to
+  X", "confirmed by running...", or "verified directly" framing.
+  State the design and the reason it is correct; that is enough.
+  Process narrative — what changed, why, and how it was verified —
+  belongs in the commit message for that change, which is already the
+  durable historical record. `README.md` should read as evergreen
+  documentation of the system as it exists today, not a changelog.
 * **Absolute Imports:** Import a sibling module within the same package
   by its full dotted path (`from lag_service_kit.logging import
   configure_logging`), never by a relative import (`from ..logging

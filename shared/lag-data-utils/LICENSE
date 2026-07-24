@@ -1,0 +1,43 @@
+Copyright (c) 2026 Linear Analytics Group, LLC. All rights reserved.
+
+This repository and all of its contents (source code, documentation,
+configuration, and associated materials) are the proprietary property
+of Linear Analytics Group, LLC. No license, right, or permission is
+granted to any person to use, copy, modify, merge, publish,
+distribute, sublicense, sell, or create derivative works from any part
+of this repository for any commercial or non-commercial purpose,
+except as expressly stated below.
+
+EVALUATION GRANT
+
+Permission is granted to prospective clients, employers, and technical
+reviewers to:
+
+  1. View and read this repository's source code and documentation.
+  2. Clone this repository and run it locally, including but not
+     limited to the zero-setup mock demo (`run_mock_sync.py`) and the
+     live Dataverse connectivity utility (`test_connection.py`),
+
+solely for the purpose of code review, technical assessment, and
+evaluating the author's skills and work product. This grant does not
+extend to any commercial use, production deployment, redistribution,
+sublicensing, or the creation of derivative works based on this
+repository, whether in whole or in part.
+
+COMMERCIAL LICENSING
+
+For inquiries regarding commercial licensing, redistribution rights,
+or any use beyond the Evaluation Grant above, contact:
+
+  Jeff Perkinson <jeff@linearanalyticsgroup.com>
+
+NO WARRANTY
+
+THIS REPOSITORY IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDER BE
+LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -829,6 +829,27 @@ both wheels *before* `requirements.txt`, so by the time the lock file
 is installed, pip finds them already present and never needs to
 resolve or hash-check them itself.
 
+### Packaging Governance: Real Metadata, Not Just a Version Number
+
+**`Requires-Python`:** Without a `requires-python` constraint on the
+package itself, `pip install`s into older interpreters would succeed
+silently and fail later, deep inside the given module(s), with a
+confusing `TypeError` instead of a clear version-mismatch error at
+install time. Packages declare `requires-python`, `license`,
+`authors`, `classifiers` (including `Typing :: Typed`, matching their
+`py.typed` marker), and `[project.urls]` in their respective
+`pyproject.toml` files.
+
+**Package Version References:** Package versions are exposed via
+`importlib.metadata.version` in each package's `__init__.py`, rather
+than a hardcoded string literal — this reads the version pip already
+recorded at install time from the same `pyproject.toml` field, so it
+can never drift out of sync.
+
+**Licensing:** this repository is proprietary, source-available for
+evaluation only — see the root `LICENSE` file. Each packages'
+`pyproject.toml` embed this license to support build requirements.
+
 ### Multi-Threaded Concurrency vs. OData v4 $batch
 
 To scale the execution speed of the sync engine beyond sequential, 
