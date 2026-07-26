@@ -977,6 +977,19 @@ already-failing destination.
 > portfolio at this time; it would need to be designed for explicitly
 > if a non-idempotent destination is ever added.
 
+### Resilience & Rate Limiting Strategy
+
+- **Current Implementation:** Reactive throttling via HTTP status
+  handling (exponential backoff and `Retry-After` header compliance)
+  at the transport layer.
+- **Sustained Concurrency Strategy:** Under heavy batch loads using
+  `ThreadPoolExecutor`, client-side pacing (e.g., Token Bucket) can be
+  injected ahead of the transport layer to proactively align
+  concurrency with Dataverse Service Protection Limits. Not developed
+  in this portfolio — a documented scaling consideration, not a
+  built or tested capability. The reactive strategy above is what
+  actually ships and runs today.
+
 ## Execution flow
 
 ```mermaid
@@ -1095,12 +1108,14 @@ real `Entity.xml` — a schema change on either side that isn't
 mirrored on the other fails locally, without needing a live Dataverse
 environment to surface it.
 
-This repository uses pure `pac` CLI solution packing rather than
-`.cdsproj` MSBuild wrappers, to maintain a clean, language-agnostic
-schema layer tailored for Python/OData data engine integration. C#
-plugin assemblies can be registered directly into a
-`PluginAssemblies/` schema directory without modifying the deployment
-pipeline.
+This repository prioritizes a pure `pac` CLI solution packing strategy
+over `.cdsproj` MSBuild wrappers to maintain a clean, language-agnostic
+schema layer tailored for Python/OData data engine integration. The
+solution structure is forward-compatible with Dataverse extensibility
+standards: server-side C# plugin assemblies could be integrated into
+the deployment pipeline by outputting compiled binaries directly into
+the solution's assembly path — see `src/PluginAssemblies/` for where
+that would land, reserved and documented, not wired up today.
 
 `src/` holds the unmanaged, dev-authored schema source —
 `pac solution pack --folder src --zipfile dist/LAGInventorySync.zip
@@ -1351,7 +1366,13 @@ pydocstyle --convention=numpy <files>
 This is mechanically enforced, not just documented: `.github/workflows/ci.yml`
 runs mypy, pydocstyle, and the full `tests/` suite on every push and pull
 request against `trunk`, from a clean checkout — see that workflow for
-the exact commands. The same root `pyproject.toml` also declares this
+the exact commands. CI also installs the `pac` CLI as a `dotnet` global
+tool and packs the Dataverse solution
+(`pac solution pack --folder platform/power-platform/LAGInventorySync/src
+--packagetype Unmanaged`) on every run — the same command documented in
+"Power Platform Solution" above, gated in CI rather than only runnable
+by hand, so a malformed schema change fails the build instead of
+surfacing only when someone next tries to pack it. The same root `pyproject.toml` also declares this
 repo's own dev/test tooling (`mypy`, `pydocstyle`, `pytest`, `responses`,
 etc.) as `[project.optional-dependencies]` extras (`pip install
 ".[dev,test]"`) rather than separate `requirements-*.txt` files — the

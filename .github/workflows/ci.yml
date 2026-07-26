@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify:
-    name: mypy, pydocstyle, pytest (Python 3.9)
+    name: mypy, pydocstyle, pytest (Python 3.9), pac solution pack
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,3 +65,19 @@ jobs:
 
       - name: Test suite (tests/)
         run: pytest tests/ --cov --cov-report=term-missing
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install pac CLI
+        run: |
+          dotnet tool install --global Microsoft.PowerApps.CLI.Tool
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Pack the Dataverse solution (pac CLI)
+        run: >
+          pac solution pack
+          --folder platform/power-platform/LAGInventorySync/src
+          --zipfile /tmp/LAGInventorySync.zip
+          --packagetype Unmanaged
