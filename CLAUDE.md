@@ -278,7 +278,22 @@ in this repo. They are not advisory.
   this file or in source.
 - **Auth pattern:** MSAL client credentials flow (application service
   principal) — no user delegation flows.
-- **Toolchain:** `.NET 10 Core` via `pac` CLI, Python 3 with MSAL.
+- **Toolchain:** the Dataverse solution
+  (`platform/power-platform/LAGInventorySync/`) packs and unpacks via
+  the `pac` CLI directly (`pac solution pack`/`unpack`) against the
+  unpacked `src/` folder — no `.cdsproj`, MSBuild, or NuGet package
+  reference involved. `src/` holds the unmanaged, dev-authored schema
+  source; `pac solution pack --folder src --zipfile <path> --packagetype
+  Unmanaged` reproduces the deployable unmanaged solution locally for
+  re-import into a dev/sandbox environment. A managed build for
+  promotion to a downstream environment is exported directly from the
+  live Dataverse environment (`pac solution export --managed true`) as
+  a release-pipeline step, not repacked locally from the unmanaged
+  source — Dataverse itself seals the managed layer server-side at
+  export time, and the resulting zip is a build artifact, not
+  committed to source control (see `.gitignore` in that directory).
+  The sync engine itself is Python 3 with MSAL, entirely independent
+  of this toolchain.
 - **Schema casing:** Verify all OData entity/field names against the Power
   Apps Maker Portal at time of execution. Alternate Key logical names are
   case-sensitive (e.g., `lagsol_ExternalSKUID` is distinct from

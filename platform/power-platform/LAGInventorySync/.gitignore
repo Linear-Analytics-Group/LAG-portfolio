@@ -1,8 +1,5 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# msbuild output directories
-/bin
-/obj
-
-# MSBuild Binary and Structured Log
-*.binlog
+# Packed solution artifacts produced by `pac solution pack` — the
+# deployable output, rebuilt from src/ on demand, never the source of
+# truth committed here.
+/dist
+*.zip
