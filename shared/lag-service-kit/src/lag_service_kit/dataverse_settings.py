@@ -1,7 +1,7 @@
 """Pydantic settings mixin for services that connect to Microsoft Dataverse."""
 
 import uuid
-from typing import ClassVar, Tuple
+from typing import ClassVar
 from urllib.parse import urlparse
 
 from pydantic import Field, ValidationInfo, field_validator
@@ -55,7 +55,7 @@ class DataverseConnectionSettings(BaseSettings):
     azure_client_secret: str = Field(..., min_length=1)
     dataverse_url: str = Field(..., min_length=1)
 
-    vault_secret_fields: ClassVar[Tuple[str, ...]] = (
+    vault_secret_fields: ClassVar[tuple[str, ...]] = (
         "azure_tenant_id",
         "azure_client_id",
         "azure_client_secret",

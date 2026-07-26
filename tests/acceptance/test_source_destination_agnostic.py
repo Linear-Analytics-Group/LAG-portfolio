@@ -12,8 +12,9 @@ import pytest
 from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource, JsonInventorySource
 
+pytestmark = pytest.mark.acceptance
 
-@pytest.mark.acceptance
+
 def test_csv_and_json_sources_produce_identical_deduplicated_records(
     csv_source: CsvInventorySource, json_source: JsonInventorySource
 ) -> None:
@@ -31,7 +32,6 @@ def test_csv_and_json_sources_produce_identical_deduplicated_records(
     assert csv_records.equals(json_records)
 
 
-@pytest.mark.acceptance
 def test_swapping_source_requires_no_new_destination_class(
     csv_source: CsvInventorySource, json_source: JsonInventorySource
 ) -> None:
@@ -44,7 +44,6 @@ def test_swapping_source_requires_no_new_destination_class(
     )
 
 
-@pytest.mark.acceptance
 def test_shipped_mock_feeds_are_themselves_interchangeable() -> None:
     """The real, shipped CSV and JSON mock feeds are equivalent, too."""
     csv_runner = DataverseInventorySyncRunner(source=CsvInventorySource())

@@ -16,7 +16,7 @@ No ``.env`` file, no Azure credentials, and no network access required.
 """
 
 import hashlib
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import patch
 
 import requests
@@ -52,7 +52,7 @@ class _FakeConfidentialClientApplication:
 
     def acquire_token_for_client(
         self, *args: Any, **kwargs: Any
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         return {"access_token": "mock-bearer-token"}
 
 

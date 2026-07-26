@@ -69,10 +69,13 @@ families, use ``BaseClient``:
 >>> def run_sync(client: BaseClient) -> None: ...
 """
 
-from .base import AuthenticationError, BaseClient
-from .dataverse import DataverseAuthenticationError, DataverseClient
-from .http import BaseHttpClient
-from .odata import ODataClient
+from lag_data_utils.clients.base import AuthenticationError, BaseClient
+from lag_data_utils.clients.dataverse import (
+    DataverseAuthenticationError,
+    DataverseClient,
+)
+from lag_data_utils.clients.http import BaseHttpClient
+from lag_data_utils.clients.odata import ODataClient
 
 __all__ = [
     "AuthenticationError",

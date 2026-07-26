@@ -315,10 +315,9 @@ def from_settings(cls, settings: DataverseConnectionSettings) -> "DataverseClien
 
 where `DataverseConnectionSettings` is a `@runtime_checkable
 typing.Protocol` — not a Pydantic base class. Any object with the right
-shape satisfies it. This is verified directly: a `lag_service_kit`
-settings instance passes `isinstance(obj, Proto)` against the
-`lag_data_utils` protocol despite the two packages never importing from
-each other.
+shape satisfies it: a `lag_service_kit` settings instance passes
+`isinstance(obj, Proto)` against the `lag_data_utils` protocol despite
+the two packages never importing from each other.
 
 ### `RecordReader` and `InventorySource` — format-agnostic ingestion
 
@@ -414,12 +413,14 @@ read from the environment:
 
 ### Secrets Management: Azure Key Vault vs. Plain `.env`
 
-`AZURE_CLIENT_SECRET` — the Entra ID app registration's credential —
-originally lived only in a plaintext, git-ignored `.env` file. That's
-adequate for a solo developer's local machine, but not for a service
-meant to demonstrate enterprise-grade secrets handling: a plaintext
-file is one accidental `git add -f`, shared support ticket, or backup
-away from leaking a live credential.
+A plaintext, git-ignored `.env` file is adequate for a solo
+developer's local machine, but not on its own for a service meant to
+demonstrate enterprise-grade secrets handling: a plaintext file is one
+accidental `git add -f`, shared support ticket, or backup away from
+leaking a live credential — a real risk for `AZURE_CLIENT_SECRET`, the
+Entra ID app registration's credential. Azure Key Vault closes that
+gap as an optional, non-breaking upgrade layered on top of the same
+`.env` path.
 
 **Two separate identities are in play here, easy to conflate:** the
 Entra ID app registration (service principal) that authenticates *to
@@ -568,24 +569,26 @@ matching `get_secret()`); a test's fake satisfies it too, with no
 inheritance relationship between the two at all. Neither class knows
 the Protocol exists.
 
-Two details were load-bearing enough to get wrong on the first pass,
-worth recording so they aren't relearned the hard way:
+Two structural-typing pitfalls apply to any Protocol modeled on a
+real third-party type, worth stating explicitly:
 
-* **`_SecretValue.value` had to be `Optional[str]`, not `str`.** The
-  real `KeyVaultSecret.value` is itself `Optional[str]` (a secret
-  version can exist without a value — e.g. disabled or soft-deleted).
-  A Protocol narrower than the real type it's supposed to describe
-  will always reject the real type as a structural mismatch; the
-  Protocol must describe the type honestly, not the type this code
-  happens to expect on the happy path.
-* **`_SecretValue.value` had to be declared as a read-only
-  `@property`, not a plain attribute.** A Protocol plain attribute
-  means "gettable and settable"; the real `KeyVaultSecret.value` is a
-  read-only property, so a plain-attribute Protocol member rejects it
-  as a mismatch even once the type itself is correct. A settable fake
-  attribute still satisfies a read-only Protocol requirement (read-write
-  is a superset of read-only) — the fix only needed to flow one
-  direction.
+* **A Protocol member's type must match the real type's optionality
+  exactly.** `_SecretValue.value` is typed `Optional[str]`, matching
+  the real `KeyVaultSecret.value` exactly (a secret version can exist
+  without a value — e.g. disabled or soft-deleted). A Protocol
+  narrower than the real type it's supposed to describe always
+  rejects the real type as a structural mismatch; the Protocol must
+  describe the type honestly, not the type this code happens to
+  expect on the happy path.
+* **A read-only property on the real type needs a read-only property
+  on the Protocol, not a plain attribute.** `_SecretValue.value` is
+  declared as a read-only `@property` because the real
+  `KeyVaultSecret.value` is one too; a Protocol plain attribute means
+  "gettable and settable," so it would reject the real read-only
+  property as a mismatch even with the type itself correct. A settable
+  fake attribute still satisfies a read-only Protocol requirement
+  (read-write is a superset of read-only), so this constraint only
+  binds in one direction.
 
 **Why this is the durable pattern, not a one-off:** structural typing
 here is a direct expression of the Dependency Inversion Principle —
@@ -615,15 +618,15 @@ via `extra=`. Existing call sites in `BaseSyncRunner.run()` and
 instead of folding it into the message string, so
 each becomes an independently queryable JSON key.
 
-**A real constraint surfaced while building this, worth recording:**
-`extra={"created": ...}` raises `KeyError` at the logging call itself
-— `created` collides with `logging.LogRecord`'s own creation-timestamp
-attribute, and `logging.Logger.makeRecord()` rejects any `extra=` key
-that shadows an existing `LogRecord` attribute before `JsonFormatter`
-ever runs. Colliding fields are prefixed (e.g., `records_created`, 
-`records_updated`, `records_failed`) to account for this. The same 
-discipline applies to any future call site: a domain-specific or prefixed 
-key name, never a bare word that might already mean something 
+**A real constraint call sites must respect:** `extra={"created": ...}`
+raises `KeyError` at the logging call itself — `created` collides with
+`logging.LogRecord`'s own creation-timestamp attribute, and
+`logging.Logger.makeRecord()` rejects any `extra=` key that shadows an
+existing `LogRecord` attribute before `JsonFormatter` ever runs.
+Colliding fields are prefixed (e.g., `records_created`,
+`records_updated`, `records_failed`) to avoid this. The same
+discipline applies to any future call site: a domain-specific or
+prefixed key name, never a bare word that might already mean something
 to `logging` itself.
 
 A per-run correlation ID (tagging every log line from one execution,
@@ -734,13 +737,13 @@ already is); branching internally on `info.field_name` to run
 different logic per field would combine unrelated checks into one
 function body, harder to read and to test in isolation.
 
-**Real cost of this fix, paid once:** three existing test files
-constructed `DataverseConnectionSettings`/`InventorySyncSettings`
-with placeholder strings like `"tenant-id"` — those now fail GUID
-validation, exactly as they should. Each was updated to a
-syntactically valid but obviously fake GUID
-(`"12345678-1234-1234-1234-123456789abc"`-style), a one-time fixture
-update rather than a design compromise.
+**A consequence worth naming:** strict GUID validation means any
+`DataverseConnectionSettings`/`InventorySyncSettings` test fixture
+must use a syntactically valid GUID
+(`"12345678-1234-1234-1234-123456789abc"`-style) for
+`azure_tenant_id`/`azure_client_id`, never an arbitrary placeholder
+string like `"tenant-id"` — a fixture-authoring constraint, not a
+design compromise.
 
 ### Monorepo Dependency Resolution: Install Order vs. a Private Feed
 

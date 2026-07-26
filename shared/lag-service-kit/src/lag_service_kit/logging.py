@@ -4,14 +4,14 @@ import json
 import logging
 import logging.config
 import sys
-from typing import Any, Dict, FrozenSet
+from typing import Any
 
 #: Every attribute a plain ``logging.LogRecord`` carries before any
 #: call-site ``extra=`` fields are added, computed from a throwaway
 #: record rather than hardcoded so it stays correct across Python
 #: versions that add or remove ``LogRecord`` attributes (e.g. 3.12's
 #: ``taskName``).
-_STANDARD_RECORD_ATTRS: FrozenSet[str] = frozenset(
+_STANDARD_RECORD_ATTRS: frozenset[str] = frozenset(
     logging.LogRecord(
         name="", level=0, pathname="", lineno=0, msg="", args=(), exc_info=None
     ).__dict__.keys()
@@ -61,7 +61,7 @@ class JsonFormatter(logging.Formatter):
             rather than raising, since a logging call must never
             itself crash the caller.
         """
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
             "logger": record.name,
@@ -101,7 +101,7 @@ def configure_logging(log_level: str = "INFO") -> None:
         If ``log_level`` does not correspond to a valid ``logging`` level
         name.
     """
-    logging_config: Dict[str, Any] = {
+    logging_config: dict[str, Any] = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {

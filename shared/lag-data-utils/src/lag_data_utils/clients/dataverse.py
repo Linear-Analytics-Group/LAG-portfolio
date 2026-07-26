@@ -3,11 +3,8 @@
 import threading
 from typing import (
     Any,
-    Dict,
-    List,
     Optional,
     Protocol,
-    Tuple,
     cast,
     runtime_checkable,
 )
@@ -15,14 +12,14 @@ from typing import (
 import msal
 from urllib3.util.retry import Retry
 
-from .base import AuthenticationError
-from .http import (
+from lag_data_utils.clients.base import AuthenticationError
+from lag_data_utils.clients.http import (
     DEFAULT_POOL_CONNECTIONS,
     DEFAULT_POOL_MAXSIZE,
     DEFAULT_RETRY,
     DEFAULT_TIMEOUT,
 )
-from .odata import ODataClient
+from lag_data_utils.clients.odata import ODataClient
 
 
 @runtime_checkable
@@ -138,7 +135,7 @@ class DataverseClient(ODataClient):
         client_id: str,
         client_secret: str,
         environment_url: str,
-        timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
+        timeout: tuple[float, float] = DEFAULT_TIMEOUT,
         retry: Retry = DEFAULT_RETRY,
         pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
         pool_connections: int = DEFAULT_POOL_CONNECTIONS,
@@ -159,7 +156,7 @@ class DataverseClient(ODataClient):
         environment_url : str
             The root URL of the target Dataverse environment. A trailing
             slash is stripped automatically.
-        timeout : Tuple[float, float]
+        timeout : tuple[float, float]
             ``(connect_timeout, read_timeout)`` in seconds for every
             request this client issues. Defaults to
             :data:`~lag_data_utils.clients.http.DEFAULT_TIMEOUT`.
@@ -198,7 +195,7 @@ class DataverseClient(ODataClient):
                 authority=f"https://login.microsoftonline.com/{tenant_id}",
             )
         )
-        self._scope: List[str] = [f"{self._environment_url}/.default"]
+        self._scope: list[str] = [f"{self._environment_url}/.default"]
         self._token_lock: threading.Lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -209,7 +206,7 @@ class DataverseClient(ODataClient):
     def from_settings(
         cls,
         settings: DataverseConnectionSettings,
-        timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
+        timeout: tuple[float, float] = DEFAULT_TIMEOUT,
         retry: Retry = DEFAULT_RETRY,
         pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
         pool_connections: int = DEFAULT_POOL_CONNECTIONS,
@@ -224,7 +221,7 @@ class DataverseClient(ODataClient):
             a ``lag_service_kit.dataverse_settings.DataverseConnectionSettings``
             instance). This client has no dependency on whatever
             configuration framework produced ``settings``.
-        timeout : Tuple[float, float]
+        timeout : tuple[float, float]
             Forwarded to :meth:`__init__`. Defaults to
             :data:`~lag_data_utils.clients.http.DEFAULT_TIMEOUT`.
         retry : Retry
@@ -313,7 +310,7 @@ class DataverseClient(ODataClient):
         thread behind it in the queue sees the now-populated cache on
         its second check and never issues a redundant request.
         """
-        result: Optional[Dict[str, Any]] = self._msal_app.acquire_token_silent(
+        result: Optional[dict[str, Any]] = self._msal_app.acquire_token_silent(
             scopes=self._scope, account=None
         )
         if not result:
@@ -359,7 +356,7 @@ class DataverseClient(ODataClient):
     # Dataverse-specific header overrides
     # ------------------------------------------------------------------
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Construct Dataverse-specific HTTP request headers.
 
         Extends the standard OData v4 headers provided by ``ODataClient``
@@ -371,7 +368,7 @@ class DataverseClient(ODataClient):
 
         Returns
         -------
-        Dict[str, str]
+        dict[str, str]
             A dictionary of HTTP request headers combining the standard OData
             v4 headers with the Dataverse-specific ``Prefer`` header.
         """

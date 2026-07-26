@@ -1,9 +1,9 @@
 """Format-specific record readers implementing the ``RecordReader`` protocol."""
 
-from .base import RecordReader
-from .csv import CsvRecordReader
-from .json import JsonRecordReader
-from .parquet import ParquetRecordReader
+from lag_service_kit.readers.base import RecordReader
+from lag_service_kit.readers.csv import CsvRecordReader
+from lag_service_kit.readers.json import JsonRecordReader
+from lag_service_kit.readers.parquet import ParquetRecordReader
 
 __all__ = [
     "RecordReader",

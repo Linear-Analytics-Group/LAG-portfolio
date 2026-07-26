@@ -1,5 +1,5 @@
 """Destination-agnostic sync orchestration scaffolding for every LAG service."""
 
-from .base import BaseSyncRunner
+from lag_service_kit.runners.base import BaseSyncRunner
 
 __all__ = ["BaseSyncRunner"]

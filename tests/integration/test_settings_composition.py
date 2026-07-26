@@ -12,6 +12,7 @@ from lag_data_utils.clients.dataverse import (
     DataverseConnectionSettings as ClientSideProtocol,
 )
 
+pytestmark = pytest.mark.integration
 
 #: Syntactically valid but obviously fake GUIDs — real Entra ID
 #: tenant/client IDs are always GUIDs, so DataverseConnectionSettings'
@@ -27,7 +28,6 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATAVERSE_URL", "https://test-org.crm.dynamics.com/")
 
 
-@pytest.mark.integration
 def test_settings_compose_dataverse_and_service_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -45,7 +45,6 @@ def test_settings_compose_dataverse_and_service_fields(
     assert settings.log_level == "DEBUG"
 
 
-@pytest.mark.integration
 def test_log_level_defaults_to_info_when_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -58,7 +57,6 @@ def test_log_level_defaults_to_info_when_unset(
     assert settings.log_level == "INFO"
 
 
-@pytest.mark.integration
 def test_settings_satisfy_lag_data_utils_protocol_structurally(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -74,7 +72,6 @@ def test_settings_satisfy_lag_data_utils_protocol_structurally(
     assert isinstance(settings, ClientSideProtocol)
 
 
-@pytest.mark.integration
 def test_settings_resolve_all_four_dataverse_fields_from_key_vault(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

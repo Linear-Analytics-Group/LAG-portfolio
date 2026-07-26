@@ -12,7 +12,7 @@ share write-loop code that doesn't actually apply to both of them.
 import logging
 from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 import requests
@@ -109,7 +109,7 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         ...
 
     @abstractmethod
-    def build_payload(self, row: Any) -> Dict[str, Any]:
+    def build_payload(self, row: Any) -> dict[str, Any]:
         """Map one deduplicated row to the destination's own field names.
 
         Parameters
@@ -120,7 +120,7 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             Field-value pairs keyed by the destination's schema names,
             ready to pass as the ``payload`` argument to
             :meth:`~lag_data_utils.clients.odata.ODataClient.upsert_record`.
@@ -216,7 +216,7 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
 
     def sync_records(
         self, client: ODataClient, records: pd.DataFrame
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Upsert every record concurrently via an idempotent PATCH.
 
         Parameters
@@ -229,7 +229,7 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
 
         Returns
         -------
-        Dict[str, int]
+        dict[str, int]
             Counts under the keys ``created``, ``updated``, ``failed``,
             and ``skipped`` — the last being records never attempted
             because the circuit breaker had already tripped.
@@ -257,7 +257,7 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         larger than :attr:`_max_workers` will already be fully in
         flight by the time the breaker could trip.
         """
-        result: Dict[str, int] = {
+        result: dict[str, int] = {
             "created": 0,
             "updated": 0,
             "failed": 0,

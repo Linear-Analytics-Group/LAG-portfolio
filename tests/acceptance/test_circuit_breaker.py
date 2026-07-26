@@ -19,6 +19,8 @@ import responses
 from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource
 
+pytestmark = pytest.mark.acceptance
+
 UPSERT_URL_PATTERN = re.compile(
     r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$"
 )
@@ -47,7 +49,6 @@ def large_csv_source(tmp_path: Path) -> CsvInventorySource:
     return CsvInventorySource(csv_path=csv_path)
 
 
-@pytest.mark.acceptance
 @responses.activate
 def test_a_sustained_outage_trips_the_breaker_and_skips_the_rest(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
@@ -70,7 +71,6 @@ def test_a_sustained_outage_trips_the_breaker_and_skips_the_rest(
     assert len(responses.calls) < RECORD_COUNT
 
 
-@pytest.mark.acceptance
 @responses.activate
 def test_a_healthy_run_never_mentions_the_circuit_breaker(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],

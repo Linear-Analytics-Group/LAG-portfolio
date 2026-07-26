@@ -1,6 +1,6 @@
 """Azure Key Vault as a pydantic-settings source, for any LAG service."""
 
-from typing import Any, Dict, Optional, Protocol, Tuple, Type
+from typing import Any, Optional, Protocol, Type
 
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
@@ -130,7 +130,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
 
     def get_field_value(
         self, field: FieldInfo, field_name: str
-    ) -> Tuple[Any, str, bool]:
+    ) -> tuple[Any, str, bool]:
         """Fetch one field's value from Key Vault, if it is vault-backed.
 
         Parameters
@@ -144,7 +144,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
 
         Returns
         -------
-        Tuple[Any, str, bool]
+        tuple[Any, str, bool]
             ``(value, field_name, False)``. ``value`` is ``None``
             immediately, with no Key Vault call at all, for any field
             not listed in the settings class's ``vault_secret_fields``.
@@ -198,18 +198,18 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         """
         return value
 
-    def __call__(self) -> Dict[str, Any]:
+    def __call__(self) -> dict[str, Any]:
         """Resolve every vault-backed field for this settings class.
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             One entry per field actually found in Key Vault. A field
             not listed in ``vault_secret_fields`` is simply absent from
             the result, letting the next source in the chain (e.g.
             ``.env``) supply it instead.
         """
-        resolved: Dict[str, Any] = {}
+        resolved: dict[str, Any] = {}
         for field_name, field in self.settings_cls.model_fields.items():
             field_value, field_key, value_is_complex = self.get_field_value(
                 field, field_name

@@ -1,12 +1,11 @@
 """Base Pydantic settings shared by every LAG service, plus `.env` discovery."""
 
 from pathlib import Path
-from typing import ClassVar, Optional, Tuple, Type
+from typing import ClassVar, Optional, Type
 
+from lag_service_kit.azure_key_vault import AzureKeyVaultSettingsSource
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
-
-from .azure_key_vault import AzureKeyVaultSettingsSource
 
 #: The only level names ``logging.config.dictConfig`` accepts. Not
 #: read from ``logging`` itself (its name-to-level mapping is a
@@ -85,7 +84,7 @@ class BaseServiceSettings(BaseSettings):
     log_level: str = Field(default="INFO")
     azure_key_vault_url: Optional[str] = Field(default=None)
 
-    vault_secret_fields: ClassVar[Tuple[str, ...]] = ()
+    vault_secret_fields: ClassVar[tuple[str, ...]] = ()
 
     @field_validator("log_level", "azure_key_vault_url", mode="before")
     @classmethod
@@ -150,7 +149,7 @@ class BaseServiceSettings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Insert an Azure Key Vault source when one is configured.
 
         Parameters
@@ -168,7 +167,7 @@ class BaseServiceSettings(BaseSettings):
 
         Returns
         -------
-        Tuple[PydanticBaseSettingsSource, ...]
+        tuple[PydanticBaseSettingsSource, ...]
             The sources pydantic-settings will try, in priority order
             (first wins): constructor kwargs, then real environment
             variables, then — only when ``AZURE_KEY_VAULT_URL`` is

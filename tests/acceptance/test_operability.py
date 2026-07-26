@@ -21,6 +21,8 @@ from pydantic import BaseModel, ValidationError
 from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource
 
+pytestmark = pytest.mark.acceptance
+
 UPSERT_URL_PATTERN = re.compile(
     r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$"
 )
@@ -41,7 +43,6 @@ def _build_validation_error() -> ValidationError:
     raise AssertionError("expected ValidationError was not raised")
 
 
-@pytest.mark.acceptance
 def test_missing_configuration_is_reported_and_run_fails(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
     csv_source: CsvInventorySource,
@@ -61,7 +62,6 @@ def test_missing_configuration_is_reported_and_run_fails(
     assert "Configuration error" in capsys.readouterr().out
 
 
-@pytest.mark.acceptance
 def test_authentication_failure_is_reported_and_run_fails(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
     csv_source: CsvInventorySource,
@@ -87,7 +87,6 @@ def test_authentication_failure_is_reported_and_run_fails(
     assert "Authentication error" in capsys.readouterr().out
 
 
-@pytest.mark.acceptance
 @responses.activate
 def test_one_failed_record_does_not_stop_the_rest_from_syncing(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
@@ -110,7 +109,6 @@ def test_one_failed_record_does_not_stop_the_rest_from_syncing(
     assert "FAILED sku_id=SKU-002" in output
 
 
-@pytest.mark.acceptance
 @responses.activate
 def test_a_dropped_connection_on_one_record_does_not_stop_the_rest(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],

@@ -15,7 +15,7 @@ this same class works unchanged whether the feed is CSV, JSON, Parquet,
 or anything else.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from config import InventorySyncSettings
 from defaults import (
@@ -25,10 +25,9 @@ from defaults import (
     DEFAULT_MAX_WORKERS,
 )
 from lag_data_utils.clients.dataverse import DataverseClient
+from runners.base import InventoryDomainMixin
+from runners.odata import BaseODataInventorySyncRunner
 from sources import InventorySource
-
-from .base import InventoryDomainMixin
-from .odata import BaseODataInventorySyncRunner
 
 #: This portfolio's shipped Dataverse schema — a different customer's
 #: environment overrides these at construction time (see README.md's
@@ -41,7 +40,7 @@ DEFAULT_ALTERNATE_KEY_FIELD: str = "lagsol_skuid"
 #: construction time rather than requiring a ``build_payload()``
 #: override — see README.md's "Field Mapping: Constructor-Injected
 #: Dict vs. External Mapping File".
-DEFAULT_FIELD_MAPPING: Dict[str, str] = {
+DEFAULT_FIELD_MAPPING: dict[str, str] = {
     "item_name": "lagsol_name",
     "unit_price": "lagsol_unitprice",
 }
@@ -79,7 +78,7 @@ class DataverseInventorySyncRunner(
         dedupe_key: str = DEDUPE_KEY,
         entity_set: str = DEFAULT_ENTITY_SET,
         alternate_key_field: str = DEFAULT_ALTERNATE_KEY_FIELD,
-        field_mapping: Dict[str, str] = DEFAULT_FIELD_MAPPING,
+        field_mapping: dict[str, str] = DEFAULT_FIELD_MAPPING,
         max_workers: int = DEFAULT_MAX_WORKERS,
         chunksize: int = DEFAULT_CHUNK_SIZE,
         failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
@@ -99,7 +98,7 @@ class DataverseInventorySyncRunner(
         alternate_key_field : str
             The schema name of the Dataverse alternate key field.
             Defaults to :data:`DEFAULT_ALTERNATE_KEY_FIELD`.
-        field_mapping : Dict[str, str]
+        field_mapping : dict[str, str]
             Source column name -> Dataverse field name, applied
             generically by :meth:`build_payload`. Defaults to
             :data:`DEFAULT_FIELD_MAPPING`.
@@ -226,7 +225,7 @@ class DataverseInventorySyncRunner(
             settings, pool_maxsize=self._max_workers * 2
         )
 
-    def build_payload(self, row: Any) -> Dict[str, Any]:
+    def build_payload(self, row: Any) -> dict[str, Any]:
         """Map a generic inventory row to Dataverse's field schema.
 
         Applies :attr:`_field_mapping` generically rather than naming
@@ -244,7 +243,7 @@ class DataverseInventorySyncRunner(
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             One key per :attr:`_field_mapping` value (a Dataverse field
             name), holding the corresponding source column's value from
             ``row``.

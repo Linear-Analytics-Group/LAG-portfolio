@@ -20,12 +20,13 @@ import responses
 from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource
 
+pytestmark = pytest.mark.acceptance
+
 UPSERT_URL_PATTERN = re.compile(
     r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$"
 )
 
 
-@pytest.mark.acceptance
 @responses.activate
 def test_new_records_are_reported_as_created(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
@@ -42,7 +43,6 @@ def test_new_records_are_reported_as_created(
     assert "3 created, 0 updated, 0 failed (of 3 records)" in output
 
 
-@pytest.mark.acceptance
 @responses.activate
 def test_existing_records_are_updated_not_duplicated(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
@@ -59,7 +59,6 @@ def test_existing_records_are_updated_not_duplicated(
     assert "0 created, 3 updated, 0 failed (of 3 records)" in output
 
 
-@pytest.mark.acceptance
 @responses.activate
 def test_sync_never_performs_a_check_then_act_loop(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],
@@ -79,7 +78,6 @@ def test_sync_never_performs_a_check_then_act_loop(
     assert methods_used == {"PATCH"}
 
 
-@pytest.mark.acceptance
 @responses.activate
 def test_rerunning_the_same_feed_converges_to_all_updates(
     dataverse_runner_factory: Callable[..., DataverseInventorySyncRunner],

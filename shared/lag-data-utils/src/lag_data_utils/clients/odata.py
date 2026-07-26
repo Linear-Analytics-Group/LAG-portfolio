@@ -1,12 +1,11 @@
 """Abstract OData v4 protocol layer shared by all OData-compliant connectors."""
 
 from abc import abstractmethod
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Optional, cast
 from urllib.parse import quote
 
 import requests
-
-from .http import BaseHttpClient
+from lag_data_utils.clients.http import BaseHttpClient
 
 
 class ODataClient(BaseHttpClient):
@@ -99,7 +98,7 @@ class ODataClient(BaseHttpClient):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Construct the standard OData v4 request headers for this connector.
 
         Acquires a fresh (or cached) Bearer token via
@@ -111,7 +110,7 @@ class ODataClient(BaseHttpClient):
 
         Returns
         -------
-        Dict[str, str]
+        dict[str, str]
             A dictionary of HTTP request headers, including
             ``Authorization``, ``Content-Type``, ``OData-MaxVersion``,
             ``OData-Version``, and ``Accept``.
@@ -216,7 +215,7 @@ class ODataClient(BaseHttpClient):
         entity_set: str,
         alternate_key_name: str,
         key_value: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> requests.Response:
         """Persist a record via an idempotent OData v4 upsert (HTTP PATCH).
 
@@ -240,7 +239,7 @@ class ODataClient(BaseHttpClient):
         key_value : str
             The specific business key value targeting the record to
             upsert (e.g., an external SKU identifier or ERP primary key).
-        payload : Dict[str, Any]
+        payload : dict[str, Any]
             Field-value pairs to write to the destination record. Keys
             must be valid schema field names for ``entity_set``.
 
@@ -281,8 +280,8 @@ class ODataClient(BaseHttpClient):
         entity_set: str,
         alternate_key_name: str,
         key_value: str,
-        select_fields: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        select_fields: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
         """Retrieve a single record by its alternate key value.
 
         Issues an HTTP ``GET`` request for the entity resource
@@ -299,7 +298,7 @@ class ODataClient(BaseHttpClient):
             The schema name of the alternate key field.
         key_value : str
             The business key value identifying the record to retrieve.
-        select_fields : List[str], optional
+        select_fields : list[str], optional
             A list of field schema names to include in the response.
             If omitted, all fields are returned. Projecting only the
             required fields significantly reduces response payload
@@ -307,7 +306,7 @@ class ODataClient(BaseHttpClient):
 
         Returns
         -------
-        Dict[str, Any]
+        dict[str, Any]
             The deserialized JSON object representing the retrieved
             entity record.
 
@@ -328,7 +327,7 @@ class ODataClient(BaseHttpClient):
         >>> print(record["lagsol_quantityonhand"])
         """
         url = self._build_entity_url(entity_set, alternate_key_name, key_value)
-        params: Dict[str, Any] = {}
+        params: dict[str, Any] = {}
         if select_fields:
             params["$select"] = ",".join(select_fields)
         headers = self._get_headers()
@@ -336,17 +335,17 @@ class ODataClient(BaseHttpClient):
             url, params=params, headers=headers, timeout=self._timeout
         )
         response.raise_for_status()
-        return cast(Dict[str, Any], response.json())
+        return cast(dict[str, Any], response.json())
 
     def query_records(
         self,
         entity_set: str,
         odata_filter: Optional[str] = None,
-        select_fields: Optional[List[str]] = None,
+        select_fields: Optional[list[str]] = None,
         top: Optional[int] = None,
         skip: Optional[int] = None,
         order_by: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Query a collection of records using OData v4 system query options.
 
         Issues an HTTP ``GET`` request against the ``entity_set``
@@ -362,7 +361,7 @@ class ODataClient(BaseHttpClient):
         odata_filter : str, optional
             An OData v4 ``$filter`` expression string to constrain the
             result set (e.g., ``"lagsol_quantityonhand lt 10"``).
-        select_fields : List[str], optional
+        select_fields : list[str], optional
             A list of field schema names to include in each returned
             record. Equivalent to a SQL ``SELECT`` column list.
         top : int, optional
@@ -377,7 +376,7 @@ class ODataClient(BaseHttpClient):
 
         Returns
         -------
-        List[Dict[str, Any]]
+        list[dict[str, Any]]
             A list of deserialized entity record dictionaries. Returns
             an empty list if no records match the supplied filter
             expression.
@@ -401,7 +400,7 @@ class ODataClient(BaseHttpClient):
         ... )
         """
         url = f"{self.base_url}/{entity_set}"
-        params: Dict[str, Any] = {}
+        params: dict[str, Any] = {}
         if odata_filter:
             params["$filter"] = odata_filter
         if select_fields:
@@ -417,7 +416,7 @@ class ODataClient(BaseHttpClient):
             url, params=params, headers=headers, timeout=self._timeout
         )
         response.raise_for_status()
-        return cast(List[Dict[str, Any]], response.json().get("value", []))
+        return cast(list[dict[str, Any]], response.json().get("value", []))
 
     def delete_record(
         self,

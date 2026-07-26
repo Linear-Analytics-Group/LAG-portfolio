@@ -1,16 +1,13 @@
 """Generic HTTP transport base shared by any HTTP-based connector."""
 
-from typing import Tuple
-
 import requests
+from lag_data_utils.clients.base import BaseClient
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .base import BaseClient
-
 #: (connect_timeout, read_timeout) in seconds. Connect should fail fast;
 #: read allows for a destination's occasional slower responses under load.
-DEFAULT_TIMEOUT: Tuple[float, float] = (5.0, 30.0)
+DEFAULT_TIMEOUT: tuple[float, float] = (5.0, 30.0)
 
 #: Retry transient failures — rate limiting (429) and upstream server
 #: hiccups (502/503/504) — with exponential backoff, honoring a
@@ -66,7 +63,7 @@ class BaseHttpClient(BaseClient):
 
     def __init__(
         self,
-        timeout: Tuple[float, float] = DEFAULT_TIMEOUT,
+        timeout: tuple[float, float] = DEFAULT_TIMEOUT,
         retry: Retry = DEFAULT_RETRY,
         pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
         pool_connections: int = DEFAULT_POOL_CONNECTIONS,
@@ -75,7 +72,7 @@ class BaseHttpClient(BaseClient):
 
         Parameters
         ----------
-        timeout : Tuple[float, float]
+        timeout : tuple[float, float]
             ``(connect_timeout, read_timeout)`` in seconds, applied to
             every HTTP request issued through this client's session.
             Defaults to :data:`DEFAULT_TIMEOUT`.
@@ -100,7 +97,7 @@ class BaseHttpClient(BaseClient):
         None
         """
         self._session: requests.Session = requests.Session()
-        self._timeout: Tuple[float, float] = timeout
+        self._timeout: tuple[float, float] = timeout
         adapter = HTTPAdapter(
             max_retries=retry,
             pool_maxsize=pool_maxsize,

@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import pandas as pd
 from pydantic import ValidationError
@@ -97,7 +97,7 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
     @abstractmethod
     def sync_records(
         self, client: ClientT, records: pd.DataFrame
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Write each record to the destination system.
 
         Parameters
@@ -110,7 +110,7 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
 
         Returns
         -------
-        Dict[str, int]
+        dict[str, int]
             Counts under at least the keys ``created``, ``updated``, and
             ``failed`` — the three every caller of :meth:`run` may rely
             on. A concrete implementation may add further protocol- or

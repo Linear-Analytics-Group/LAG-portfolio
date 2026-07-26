@@ -15,6 +15,8 @@ import responses
 from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource
 
+pytestmark = pytest.mark.integration
+
 UPSERT_URL_PATTERN = re.compile(
     r".*/lagsol_inventoryitems\(lagsol_skuid='.*'\)$"
 )
@@ -41,7 +43,6 @@ class _FakeConfidentialClientApplication:
         return {"access_token": "fake-integration-test-token"}
 
 
-@pytest.mark.integration
 @responses.activate
 def test_run_wires_real_settings_and_client_to_the_configured_environment(
     monkeypatch: pytest.MonkeyPatch, csv_source: CsvInventorySource
@@ -73,7 +74,6 @@ def test_run_wires_real_settings_and_client_to_the_configured_environment(
     )
 
 
-@pytest.mark.integration
 @responses.activate
 def test_run_sends_the_bearer_token_msal_actually_returns(
     monkeypatch: pytest.MonkeyPatch, csv_source: CsvInventorySource

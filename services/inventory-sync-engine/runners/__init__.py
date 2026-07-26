@@ -9,7 +9,7 @@ at construction time, never through inheritance — the same destination
 leaf class works with any source format.
 """
 
-from .base import InventoryDomainMixin
-from .odata import BaseODataInventorySyncRunner
+from runners.base import InventoryDomainMixin
+from runners.odata import BaseODataInventorySyncRunner
 
 __all__ = ["InventoryDomainMixin", "BaseODataInventorySyncRunner"]
