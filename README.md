@@ -37,16 +37,16 @@ graph TD
         EP["dataverse_sync_runner.py<br/>main()"]
         DISR["runners/dataverse.py<br/>DataverseInventorySyncRunner"]
         IDM["runners/base.py<br/>InventoryDomainMixin"]
-        BODR["runners/odata.py<br/>BaseODataInventorySyncRunner"]
         CSVSRC["sources/csv.py<br/>CsvInventorySource"]
         JSONSRC["sources/json.py<br/>JsonInventorySource"]
-        SRC["sources/base.py<br/>InventorySource ·<br/>ChunkedInventorySource protocols"]
         CFG["config.py<br/>InventorySyncSettings"]
         DEFAULTS["defaults.py<br/>DEDUPE_KEY · DEFAULT_MAX_WORKERS ·<br/>DEFAULT_CHUNK_SIZE · DEFAULT_FAILURE_THRESHOLD"]
     end
 
     subgraph "shared/lag-service-kit — cross-service scaffolding"
         BSR["runners/base.py<br/>BaseSyncRunner"]
+        BODR["runners/odata.py<br/>BaseODataSyncRunner"]
+        SRC["sources/base.py<br/>RecordSource ·<br/>ChunkedRecordSource protocols"]
         BSS["settings.py<br/>BaseServiceSettings, find_repo_env_file()"]
         DCS["dataverse_settings.py<br/>DataverseConnectionSettings"]
         LOG["logging.py<br/>configure_logging()"]
@@ -68,7 +68,7 @@ graph TD
     DISR -->|"inherits (protocol base)"| BODR
     BODR -->|inherits| BSR
     CSVSRC -.->|satisfies| SRC
-    JSONSRC -.->|satisfies, InventorySource only| SRC
+    JSONSRC -.->|satisfies, RecordSource only| SRC
     DISR -.->|"composes a source at construction time<br/>(injected, not inherited)"| SRC
     CFG -->|inherits| BSS
     CFG -->|inherits| DCS
@@ -79,9 +79,8 @@ graph TD
     IDM --> DEDUPE
     IDM -.->|"isinstance check, optional capability"| SRC
     IDM --> DEFAULTS
-    BODR --> DEFAULTS
-    BODR --> CB
     DISR --> DEFAULTS
+    BODR --> CB
     BSR --> LOG
     DV --> ODATA --> HTTP --> BASE
     DV -.->|"from_settings() accepts anything<br/>matching the Protocol"| DCS
@@ -90,16 +89,18 @@ graph TD
 | Layer | Package | Owns | Must never contain |
 |---|---|---|---|
 | Transport | `shared/lag-data-utils` | HTTP mechanics (`BaseHttpClient` — pooling, timeout, retry-with-backoff), OData v4 CRUD (`ODataClient`), MSAL auth, Dataverse-specific headers, the `AuthenticationError` hierarchy | Environment reads, a config framework, business logic |
-| Scaffolding | `shared/lag-service-kit` | Settings base classes, structured logging, input-format readers (including chunked CSV reading), generic dedup (whole-DataFrame and chunked), a generic `ConsecutiveFailureCircuitBreaker`, the source- and destination-agnostic `BaseSyncRunner` orchestration algorithm (generic over the transport client type) | Dataverse-specific, inventory-specific, or source-format-specific knowledge; any baked-in default number tuned to one service (see `defaults.py`) |
-| Orchestration | `services/inventory-sync-engine` | Three independent things that combine, never duplicate: the domain mixin `InventoryDomainMixin` (dedup, source binding), one write-protocol base per wire protocol (`BaseODataInventorySyncRunner` today — concurrent upsert loop, circuit breaker), and one destination leaf class per target system (`DataverseInventorySyncRunner`, combining exactly one of each) — plus, on a wholly separate axis, one `InventorySource` per feed format (`CsvInventorySource`, the only one that also satisfies the optional `ChunkedInventorySource` capability, and `JsonInventorySource`), composed into a runner by the caller. `defaults.py` holds every constructor default tuned to this service specifically | Anything reusable by a service that isn't this one |
+| Scaffolding | `shared/lag-service-kit` | Settings base classes, structured logging, input-format readers (including chunked CSV reading), generic dedup (whole-DataFrame and chunked), a generic `ConsecutiveFailureCircuitBreaker`, the source- and destination-agnostic `BaseSyncRunner` orchestration algorithm (generic over the transport client type), the OData v4 write-protocol base `BaseODataSyncRunner` (concurrent upsert loop + circuit breaker, reusable by any OData destination), and the `RecordSource`/`ChunkedRecordSource` source-composition protocols | Dataverse-specific, inventory-specific, or source-format-specific knowledge; any baked-in default number tuned to one service (see `defaults.py`) |
+| Orchestration | `services/inventory-sync-engine` | Two independent things that combine, never duplicate: the domain mixin `InventoryDomainMixin` (dedup, source binding, inventory-domain-specific) and one destination leaf class per target system (`DataverseInventorySyncRunner`, combining the mixin with `lag_service_kit`'s shared write-protocol base) — plus, on a wholly separate axis, one `RecordSource` implementation per feed format (`CsvInventorySource`, the only one that also satisfies the optional `ChunkedRecordSource` capability, and `JsonInventorySource`), composed into a runner by the caller. `defaults.py` holds every constructor default tuned to this service specifically | Anything reusable by a service that isn't this one |
 
 Three axes vary independently here, and each stays a single point of
 definition:
 
 - **Source format** (`sources/`) — composed into a runner at
   construction time, never inherited.
-- **Write protocol** (`runners/odata.py`, and future siblings) — a base
-  class per protocol, combined into a leaf via multiple inheritance.
+- **Write protocol** (`lag_service_kit/runners/odata.py`, and future
+  siblings) — a base class per protocol, combined into a leaf via
+  multiple inheritance. Lives in the shared scaffolding layer, not the
+  service, since it carries no domain- or service-specific knowledge.
 - **Destination system** (`runners/dataverse.py`, and future siblings) —
   the leaf class itself, combining one domain mixin with one protocol
   base.
@@ -147,17 +148,19 @@ Concretely:
     is set at construction time (e.g. 
     `DataverseInventorySyncRunner(source=CsvInventorySource())`) in 
     `dataverse_sync_runner.py` — via any object satisfying the
-    `sources.InventorySource` protocol (`sources/base.py`). A destination
+    `lag_service_kit.sources.base.RecordSource` protocol. A destination
     inheriting from a source class would fix that destination to one feed
     format forever; composition lets the same `DataverseInventorySyncRunner`
     read CSV or JSON — both ship today, see `sources/csv.py` and
     `sources/json.py` — with no new class.
     - It **does** inherit two independent bases, combined via multiple
     inheritance: `InventoryDomainMixin` (`runners/base.py` — dedup, source
-    binding) and `BaseODataInventorySyncRunner` (`runners/odata.py` — the
-    OData v4 upsert loop). Neither base depends on or duplicates the
-    other; a class combining both gets dedup, source binding, and the
-    write loop with each defined in exactly one place.
+    binding, inventory-domain-specific) and
+    `lag_service_kit.runners.odata.BaseODataSyncRunner` (the OData v4
+    upsert loop — destination/domain-agnostic, shared scaffolding).
+    Neither base depends on or duplicates the other; a class combining
+    both gets dedup, source binding, and the write loop with each
+    defined in exactly one place.
     - `dataverse_sync_runner.py` is reduced to implementation-specific business
     logic - identifying the leaf class to instantiate, which source to pair
     it with, and running it.
@@ -205,41 +208,49 @@ for the parts every run requires regardless of axis.
   — the inventory-domain layer. Knows what an inventory record is
   (e.g., `sku_id`, `item_name`, `unit_price`) and how to dedupe it. Knows
   nothing about the source feed, wire protocol, or destination. 
-  Its constructor takes a `source: InventorySource` collaborator, 
+  Its constructor takes a `source: RecordSource` collaborator, 
   while `load_records()` calls `self.source.read_records()`. 
   It does not inherit `BaseSyncRunner` and commits to no `ClientT`. 
   It is a bare mixin combined into a leaf class via multiple inheritance 
-  alongside the leaf's required protocol.
-- `services/inventory-sync-engine/runners/odata.py:BaseODataInventorySyncRunner`
+  alongside the leaf's required protocol. This is the one class in the
+  whole chain that's genuinely specific to this service — every other
+  class described below lives in `lag_service_kit`, promoted there
+  precisely because it carries no inventory-specific knowledge at all.
+- `lag_service_kit.runners.odata:BaseODataSyncRunner`
   — the write-protocol layer, `BaseSyncRunner[ODataClient]`. Knows how to
   drive the generic `upsert_record` loop against *any* OData v4 client,
   given `entity_set`, `alternate_key_field`, and `build_payload()` from
-  a destination leaf. Knows nothing about dedup or source feeds — those
-  come from whichever domain mixin the leaf inherits. `dedupe_key`
-  is declared here (for the one line in `sync_records()` that needs a
-  record's business-key column) but never assigned here — a domain mixin
-  is the only place that value is set, so it is never duplicated.
-  `sync_records()` dispatches up to `max_workers` upserts concurrently
-  via `ThreadPoolExecutor`, and builds one
-  `lag_service_kit.circuit_breaker.ConsecutiveFailureCircuitBreaker`
+  a destination leaf. Knows nothing about dedup, source feeds, or any
+  particular domain — those come from whichever domain mixin the leaf
+  inherits. `dedupe_key` is declared here (for the one line in
+  `sync_records()` that needs a record's business-key column) but never
+  assigned here — a domain mixin is the only place that value is set, so
+  it is never duplicated. `sync_records()` dispatches up to
+  `max_workers` upserts concurrently via `ThreadPoolExecutor`, and
+  builds one `lag_service_kit.circuit_breaker.ConsecutiveFailureCircuitBreaker`
   per run to stop dispatching further requests after
   `failure_threshold` consecutive failures — both are protocol-level
   concerns, not domain or destination knowledge, so they live here too.
-- `services/inventory-sync-engine/sources/base.py:InventorySource` — a
+  Lives in `lag_service_kit`, not the inventory service: a future
+  "orders" or "customers" sync service inherits this exact class
+  unchanged, writing only its own domain mixin and destination leaf.
+- `lag_service_kit.sources.base:RecordSource` — a
   `typing.Protocol`, not a base class. Fixes only the shape
   (`read_records() -> pd.DataFrame`) that any source must expose. A
-  sibling protocol in the same module, `ChunkedInventorySource`, adds an
+  sibling protocol in the same module, `ChunkedRecordSource`, adds an
   optional `read_record_chunks()` capability that only a source able to
   genuinely stream in bounded memory need implement — `CsvInventorySource`
   does; `JsonInventorySource` does not, and simply isn't checked via
-  `isinstance` against it.
+  `isinstance` against it. Lives in `lag_service_kit` alongside
+  `BaseODataSyncRunner`, for the same reason: the contract itself has
+  no inventory-specific knowledge, only the concrete implementations do.
 - `services/inventory-sync-engine/sources/csv.py:CsvInventorySource` —
   the source-format implementation. The only code in the service that
   knows how to read the ERP CSV feed. Knows nothing about
   `InventoryDomainMixin`, Dataverse, or any destination — it isn't even
   in the `runners` package.
 - `services/inventory-sync-engine/runners/dataverse.py:DataverseInventorySyncRunner`
-  — the destination leaf: `class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncRunner)`.
+  — the destination leaf: `class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner)`.
   The only code in the service that knows `lagsol_inventoryitems`,
   `lagsol_skuid`, and the `lagsol_` field mapping. It has no relationship
   to `CsvInventorySource` in its class definition at all.
@@ -250,13 +261,17 @@ for the parts every run requires regardless of axis.
 Adding a second destination that also speaks OData v4 — SAP S/4HANA
 Cloud, SharePoint Online — means writing a sibling leaf class (e.g.
 `runners/sap.py`) combining the same two bases,
-`class SapInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncRunner)`,
+`class SapInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner)`,
 and supplying its own settings, client, entity set, alternate key,
-and payload mapping. Its entrypoint composes it with whichever source it
-needs. Adding a destination that speaks a genuinely different wire
-protocol (e.g., SOAP, a bulk-upload REST API, etc.) means writing a sibling
-protocol base (e.g. `runners/soap.py:BaseSoapInventorySyncRunner(BaseSyncRunner[SoapClient])`)
-with its own hooks and write loop. Its leaf class still inherits
+and payload mapping — importing `BaseODataSyncRunner` straight from
+`lag_service_kit`, with nothing to duplicate. Its entrypoint composes
+it with whichever source it needs. Adding a destination that speaks a
+genuinely different wire protocol (e.g., SOAP, a bulk-upload REST API,
+etc.) means writing a sibling protocol base in `lag_service_kit` itself
+(e.g. `lag_service_kit.runners.soap:BaseSoapSyncRunner(BaseSyncRunner[SoapClient])`)
+with its own hooks and write loop — promoted there the same way
+`BaseODataSyncRunner` already is, since a write-protocol base is
+domain-agnostic by construction. Its leaf class still inherits
 `InventoryDomainMixin` unchanged, so dedup and source binding are never
 reimplemented for a new protocol. A second source format is a sibling
 source class implementing only `read_records()` — `sources/json.py:JsonInventorySource`
@@ -265,9 +280,14 @@ same shape again. `DataverseInventorySyncRunner(source=JsonInventorySource())`
 reads the JSON mock feed and produces byte-for-byte identical
 deduplicated records to `DataverseInventorySyncRunner(source=CsvInventorySource())`
 against the same mock dataset, with no new subclass. Neither
-`BaseSyncRunner`, `InventoryDomainMixin`, nor any protocol base changes
-to support a new instance of any axis, and the three axes never multiply
-against each other, thus preventing combinatorial explosion.
+`BaseSyncRunner`, `BaseODataSyncRunner`, `InventoryDomainMixin`, nor any
+protocol base changes to support a new instance of any axis, and the
+three axes never multiply against each other, thus preventing
+combinatorial explosion. Adding an entirely new *service* — orders,
+customers — means writing only that service's own domain mixin,
+destination leaf, and source implementations; the write-protocol base
+and source-composition contract are already there, unchanged, waiting
+to be inherited.
 
 ## Key design patterns
 
@@ -319,17 +339,18 @@ shape satisfies it: a `lag_service_kit` settings instance passes
 `isinstance(obj, Proto)` against the `lag_data_utils` protocol despite
 the two packages never importing from each other.
 
-### `RecordReader` and `InventorySource` — format-agnostic ingestion
+### `RecordReader` and `RecordSource` — format-agnostic ingestion
 
-Two protocols cooperate here, at two different layers:
+Two protocols cooperate here, at two different layers, both living in
+`lag_service_kit` since neither carries any domain-specific knowledge:
 
 ```python
 # lag_service_kit.readers — generic: any file format into a DataFrame
 class RecordReader(Protocol):
     def load(self, path: Path) -> pd.DataFrame: ...
 
-# services/inventory-sync-engine/sources — domain-scoped: a runner's source
-class InventorySource(Protocol):
+# lag_service_kit.sources — generic: a runner's source-composition contract
+class RecordSource(Protocol):
     def read_records(self) -> pd.DataFrame: ...
 ```
 
@@ -342,15 +363,15 @@ wraps `CsvRecordReader` over `data/erp_mock_inventory_data_feed.csv`, and
 `sources/json.py:JsonInventorySource` wraps `JsonRecordReader` over
 `data/erp_mock_inventory_data_feed.json` — the same mock inventory
 dataset, shipped in both formats. Both `read_records()` implementations
-satisfy `InventorySource` identically.
+satisfy `RecordSource` identically.
 
-Crucially, `InventoryDomainMixin` depends on `InventorySource`, not 
+Crucially, `InventoryDomainMixin` depends on `RecordSource`, not
 any concrete source class, and receives one through its constructor
 rather than through inheritance:
 
 ```python
 class InventoryDomainMixin:
-    def __init__(self, source: InventorySource) -> None:
+    def __init__(self, source: RecordSource) -> None:
         self.source = source
 
     def load_records(self) -> pd.DataFrame:
@@ -358,7 +379,7 @@ class InventoryDomainMixin:
 ```
 
 (Simplified for this point: the real `load_records()` first checks
-whether `source` also satisfies the optional `ChunkedInventorySource`
+whether `source` also satisfies the optional `ChunkedRecordSource`
 capability — see "Runtime Checkable Protocols" below — and reads/dedupes
 in bounded-memory chunks when it does, falling back to the single-shot
 call shown here otherwise.)
@@ -367,11 +388,10 @@ Supporting a further format (Parquet, a REST feed) means adding one more
 sibling module implementing only `read_records()` with the matching
 `RecordReader`. No runner changes, because no runner inherits from a
 source: `DataverseInventorySyncRunner(source=JsonInventorySource())`
-reads JSON with the exact same class used for CSV — proven directly,
-not just claimed: run against the two mock feeds, both sources produce \
-identical deduplicated records.
+reads JSON with the exact same class used for CSV — run against the two
+mock feeds, both sources produce identical deduplicated records.
 `InventoryDomainMixin.load_records()` (dedup) and
-`BaseODataInventorySyncRunner.sync_records()` (the upsert loop) never
+`BaseODataSyncRunner.sync_records()` (the upsert loop) never
 change either way — both only ever depend on the resulting `DataFrame`,
 never the source that produced it.
 
@@ -520,8 +540,8 @@ like X" is a unit test's fake.
 **Where this already applied before Key Vault existed:**
 `DataverseClient.from_settings()` takes a `DataverseConnectionSettings`
 Protocol, not a concrete Pydantic settings class (see "`from_settings()`
-and structural typing" above); `sources/base.py:InventorySource` and
-`ChunkedInventorySource` let any object with the right method(s) act
+and structural typing" above); `lag_service_kit.sources.base.RecordSource`
+and `ChunkedRecordSource` let any object with the right method(s) act
 as a runner's source, with zero base class to inherit from (see
 "Runtime Checkable Protocols" above).
 
@@ -613,7 +633,7 @@ record as one self-describing JSON object per line — `timestamp`,
 `level`, `logger`, `message`, an `exception` key with the formatted
 traceback when one is present, plus every field a call site attaches
 via `extra=`. Existing call sites in `BaseSyncRunner.run()` and
-`BaseODataInventorySyncRunner._upsert_one()` pass their contextual data 
+`BaseODataSyncRunner._upsert_one()` pass their contextual data 
 (`sku_id`, `exception_type`, per-run record counts) through `extra=` 
 instead of folding it into the message string, so
 each becomes an independently queryable JSON key.
@@ -910,9 +930,9 @@ worker threads rather than stalling an entire 1,000-record batch.
 
 ### Runtime Checkable Protocols
 
-We use a `@runtime_checkable` Protocol (`ChunkedInventorySource`, in
-`sources/base.py`) to dynamically detect whether an incoming data
-source supports chunked streaming.
+We use a `@runtime_checkable` Protocol (`ChunkedRecordSource`, in
+`lag_service_kit.sources.base`) to dynamically detect whether an
+incoming record source supports chunked streaming.
 
 * **Interface Segregation & LSP:** Not all source formats can genuinely stream. 
 Forcing a dummy streaming method onto every reader violates the Liskov 
@@ -996,7 +1016,7 @@ already-failing destination.
 sequenceDiagram
     participant Main as dataverse_sync_runner.main()
     participant Runner as BaseSyncRunner.run()
-    participant Leaf as DataverseInventorySyncRunner<br/>(InventoryDomainMixin + BaseODataInventorySyncRunner)
+    participant Leaf as DataverseInventorySyncRunner<br/>(InventoryDomainMixin + BaseODataSyncRunner)
     participant Source as CsvInventorySource
     participant Settings as InventorySyncSettings
     participant Client as DataverseClient
@@ -1030,7 +1050,7 @@ sequenceDiagram
     Entra-->>Client: Bearer token (cached for reuse)
 
     Runner->>Leaf: load_records()
-    alt source satisfies ChunkedInventorySource (CSV)
+    alt source satisfies ChunkedRecordSource (CSV)
         loop each chunksize-row chunk, in file order
             Leaf->>Source: source.read_record_chunks(chunksize)
             Source->>Reader: load_chunks(csv_path, chunksize)
@@ -1157,14 +1177,12 @@ LAG-portfolio/
 │       ├── dataverse_sync_runner.py         # Entrypoint — main() instantiates a leaf runner
 │       ├── defaults.py                      # DEDUPE_KEY, DEFAULT_MAX_WORKERS, DEFAULT_CHUNK_SIZE,
 │       │                                    # DEFAULT_FAILURE_THRESHOLD — this service's tuned numbers
-│       ├── runners/                          # Domain + protocol axes — mixin composition (multiple inheritance)
-│       │   ├── __init__.py                   # Exports InventoryDomainMixin, BaseODataInventorySyncRunner
+│       ├── runners/                          # Domain axis — the protocol axis lives in lag_service_kit
+│       │   ├── __init__.py                   # Exports InventoryDomainMixin
 │       │   ├── base.py                       # InventoryDomainMixin — dedupe, composes a source (no client type)
-│       │   ├── odata.py                      # BaseODataInventorySyncRunner — concurrent upsert loop + breaker
 │       │   └── dataverse.py                  # DataverseInventorySyncRunner — the only Dataverse-specific code
 │       ├── sources/                          # Source axis — composed into a runner, never inherited
-│       │   ├── __init__.py                   # Exports InventorySource, ChunkedInventorySource, Csv/Json sources
-│       │   ├── base.py                       # InventorySource + ChunkedInventorySource protocols
+│       │   ├── __init__.py                   # Exports CsvInventorySource, JsonInventorySource
 │       │   ├── csv.py                        # CsvInventorySource — the only source that streams in chunks
 │       │   └── json.py                       # JsonInventorySource — the only JSON-specific code
 │       ├── requirements.txt
@@ -1193,16 +1211,21 @@ LAG-portfolio/
 │           ├── dedupe.py                     # dedupe_last_seen(), dedupe_last_seen_chunks()
 │           ├── circuit_breaker.py            # ConsecutiveFailureCircuitBreaker — any batch write loop
 │           ├── readers/                      # RecordReader, Csv (+ chunked)/Json/Parquet
+│           ├── sources/                      # RecordSource, ChunkedRecordSource — source-composition contract
+│           │   ├── __init__.py               # Exports RecordSource, ChunkedRecordSource
+│           │   └── base.py
 │           └── runners/
-│               ├── __init__.py               # Exports BaseSyncRunner
-│               └── base.py                   # BaseSyncRunner[ClientT] — destination-agnostic orchestration
+│               ├── __init__.py               # Exports BaseSyncRunner, BaseODataSyncRunner
+│               ├── base.py                   # BaseSyncRunner[ClientT] — destination-agnostic orchestration
+│               └── odata.py                  # BaseODataSyncRunner — concurrent upsert loop + breaker
 │
 └── tests/                                   # Centralized suite, layered to mirror the source tree
     ├── conftest.py                           # Shared fixtures — fake Entra ID/Dataverse, no real network
     ├── unit/
     │   ├── lag_data_utils/                   # BaseClient, BaseHttpClient, ODataClient, DataverseClient
-    │   ├── lag_service_kit/                  # settings, dedupe, logging, readers, circuit breaker, BaseSyncRunner
-    │   └── inventory_sync_engine/            # InventoryDomainMixin, BaseODataInventorySyncRunner,
+    │   ├── lag_service_kit/                  # settings, dedupe, logging, readers, circuit breaker,
+    │   │                                     # BaseSyncRunner, BaseODataSyncRunner
+    │   └── inventory_sync_engine/            # InventoryDomainMixin,
     │                                          # DataverseInventorySyncRunner, CsvInventorySource
     ├── integration/                          # Real classes across a mocked network boundary
     └── acceptance/                           # Black-box: idempotency, operability, source/dest agnosticism,

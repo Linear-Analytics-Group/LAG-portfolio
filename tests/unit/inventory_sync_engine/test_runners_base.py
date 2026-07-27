@@ -17,7 +17,7 @@ pytestmark = pytest.mark.unit
 
 
 class _StubSource:
-    """A minimal InventorySource test double returning a fixed DataFrame."""
+    """A minimal RecordSource test double returning a fixed DataFrame."""
 
     def __init__(self, records: pd.DataFrame) -> None:
         self._records = records
@@ -27,7 +27,7 @@ class _StubSource:
 
 
 class _StubChunkedSource:
-    """A source satisfying both InventorySource and ChunkedInventorySource.
+    """A source satisfying both RecordSource and ChunkedRecordSource.
 
     Mirrors ``CsvInventorySource``'s real shape: every shipped chunked
     source also supports a plain full read, with chunking as an
@@ -150,7 +150,7 @@ def test_chunksize_override_is_stored() -> None:
 
 
 def test_load_records_uses_the_chunked_path_for_a_chunked_source() -> None:
-    """A ChunkedInventorySource is read via read_record_chunks.
+    """A ChunkedRecordSource is read via read_record_chunks.
 
     Proves ``InventoryDomainMixin`` actually dispatches on the source's
     capability rather than always taking one fixed path — the stub

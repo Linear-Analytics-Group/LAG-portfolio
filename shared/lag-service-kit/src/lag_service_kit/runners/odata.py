@@ -1,12 +1,13 @@
-"""OData v4 write-protocol base for inventory sync runners.
+"""OData v4 write-protocol base, for any OData v4 destination.
 
-Fixes how a deduplicated inventory row is written to *any* OData v4
-destination — an idempotent alternate-key upsert — without assuming
-which destination that is or which source produced the row. Sibling
-modules for a future non-OData protocol (e.g. ``runners/soap.py`` for a
-SOAP-based destination) implement this same shape against their own
-``ClientT``, with their own hooks and write loop, so protocols never
-share write-loop code that doesn't actually apply to both of them.
+Fixes how a deduplicated row is written to *any* OData v4 destination
+— an idempotent alternate-key upsert — without assuming which
+destination that is, which domain the record belongs to, or which
+source produced the row. A future non-OData protocol (e.g. a
+``runners/soap.py`` for a SOAP-based destination) implements this same
+shape against its own ``ClientT``, with its own hooks and write loop,
+so protocols never share write-loop code that doesn't actually apply
+to both of them.
 """
 
 import logging
@@ -18,26 +19,25 @@ import pandas as pd
 import requests
 from lag_data_utils.clients.odata import ODataClient
 from lag_service_kit.circuit_breaker import ConsecutiveFailureCircuitBreaker
-from lag_service_kit.runners import BaseSyncRunner
-
-from defaults import DEFAULT_FAILURE_THRESHOLD, DEFAULT_MAX_WORKERS
+from lag_service_kit.runners.base import BaseSyncRunner
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
-    """OData v4 write-protocol orchestration for the ERP inventory sync.
+class BaseODataSyncRunner(BaseSyncRunner[ODataClient]):
+    """OData v4 write-protocol orchestration for any destination/domain.
 
     Sits between ``lag_service_kit.runners.base.BaseSyncRunner`` (which
-    knows nothing about OData or inventory) and a destination-specific
-    leaf class (which knows nothing about the OData upsert mechanics).
-    This mirrors ``lag_data_utils.clients.odata.ODataClient``'s position
-    between ``BaseClient`` and ``DataverseClient``: it implements the
-    parts of the write loop that are generic across every OData v4
-    destination, and leaves the destination-specific field mapping as
-    abstract hooks. Knows nothing about source feeds or dedup — a
-    destination leaf class combines this with
-    ``runners.base.InventoryDomainMixin`` to get both.
+    knows nothing about OData or any particular domain) and a
+    destination-specific leaf class (which knows nothing about the
+    OData upsert mechanics). This mirrors
+    ``lag_data_utils.clients.odata.ODataClient``'s position between
+    ``BaseClient`` and ``DataverseClient``: it implements the parts of
+    the write loop that are generic across every OData v4 destination,
+    and leaves the destination-specific field mapping as abstract
+    hooks. Knows nothing about source feeds or dedup — a destination
+    leaf class combines this with a service's own domain mixin (e.g.
+    ``InventoryDomainMixin``) to get both.
 
     Notes
     -----
@@ -51,16 +51,16 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
     column :meth:`sync_records` reads each record's business key from,
     but *which* column that is is domain knowledge, not OData knowledge.
     A destination leaf class supplies it by also inheriting a domain
-    mixin (e.g. ``runners.base.InventoryDomainMixin``), which is the
-    single place that value is ever set.
+    mixin (e.g. ``InventoryDomainMixin``), which is the single place
+    that value is ever set.
     """
 
     dedupe_key: str
 
     def __init__(
         self,
-        max_workers: int = DEFAULT_MAX_WORKERS,
-        failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
+        max_workers: int,
+        failure_threshold: int,
         **kwargs: Any,
     ) -> None:
         """Set this run's upsert concurrency and failure tolerance.
@@ -69,13 +69,21 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         ----------
         max_workers : int
             Worker threads used to upsert records concurrently in
-            :meth:`sync_records`. Defaults to :data:`DEFAULT_MAX_WORKERS`.
+            :meth:`sync_records`. No default here: a sensible number
+            is a property of the calling service's own operational
+            tuning (see e.g. ``defaults.DEFAULT_MAX_WORKERS`` in
+            ``services/inventory-sync-engine``), not of this class.
         failure_threshold : int
             Consecutive failures (see
             ``lag_service_kit.circuit_breaker.ConsecutiveFailureCircuitBreaker``
             above) that trip :meth:`sync_records`'s circuit breaker,
-            skipping every record not yet attempted. Defaults to
-            :data:`DEFAULT_FAILURE_THRESHOLD`.
+            skipping every record not yet attempted. No default here,
+            for the same reason as ``max_workers`` — mirroring
+            ``ConsecutiveFailureCircuitBreaker.__init__``,
+            ``CsvRecordReader.load_chunks``, and
+            ``dedupe_last_seen_chunks``, none of which bake in a
+            default for a value that's genuinely a service's own
+            operational tuning decision.
         **kwargs : Any
             Forwarded, unexamined, to ``super().__init__()``.
 
@@ -90,7 +98,7 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         none — so nothing further needs ``**kwargs`` forwarded to it.
         Still calls ``super().__init__()`` (with no arguments) rather
         than skip it, for the same cooperative-multiple-inheritance
-        reason ``InventoryDomainMixin.__init__`` does.
+        reason a domain mixin's ``__init__`` does.
         """
         super().__init__()
         self._max_workers = max_workers
@@ -99,13 +107,13 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
     @property
     @abstractmethod
     def entity_set(self) -> str:
-        """Pluralized name of the destination's inventory entity collection."""
+        """Pluralized name of the destination's entity collection."""
         ...
 
     @property
     @abstractmethod
     def alternate_key_field(self) -> str:
-        """Schema name of the destination's SKU alternate-key field."""
+        """Schema name of the destination's alternate-key field."""
         ...
 
     @abstractmethod
@@ -115,8 +123,9 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         Parameters
         ----------
         row : Any
-            A ``NamedTuple`` row from ``load_records()``, with ``sku_id``,
-            ``item_name``, and ``unit_price`` attributes.
+            A ``NamedTuple`` row from ``load_records()``, with
+            whatever attributes the calling domain mixin's business
+            schema defines.
 
         Returns
         -------
@@ -224,8 +233,8 @@ class BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient]):
         client : ODataClient
             An authenticated OData v4 client for the target destination.
         records : pd.DataFrame
-            Deduplicated inventory records, as returned by a
-            source/domain layer's ``load_records()``.
+            Deduplicated records, as returned by a domain mixin's
+            ``load_records()``.
 
         Returns
         -------

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from sources import ChunkedInventorySource
+from lag_service_kit.sources.base import ChunkedRecordSource
 from sources.csv import CsvInventorySource
 from sources.json import JsonInventorySource
 
@@ -24,19 +24,19 @@ def _write_csv(path: Path, row_count: int) -> None:
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
-def test_csv_inventory_source_satisfies_chunked_inventory_source() -> None:
-    """CsvInventorySource structurally satisfies ChunkedInventorySource."""
-    assert isinstance(CsvInventorySource(), ChunkedInventorySource)
+def test_csv_inventory_source_satisfies_chunked_record_source() -> None:
+    """CsvInventorySource structurally satisfies ChunkedRecordSource."""
+    assert isinstance(CsvInventorySource(), ChunkedRecordSource)
 
 
-def test_json_source_does_not_satisfy_chunked_inventory_source() -> None:
+def test_json_source_does_not_satisfy_chunked_record_source() -> None:
     """JsonInventorySource has no read_record_chunks, by design.
 
     Proves the optional-capability split actually excludes a format
     that can't stream, rather than every source accidentally satisfying
-    ChunkedInventorySource regardless of whether it implements it.
+    ChunkedRecordSource regardless of whether it implements it.
     """
-    assert not isinstance(JsonInventorySource(), ChunkedInventorySource)
+    assert not isinstance(JsonInventorySource(), ChunkedRecordSource)
 
 
 def test_read_record_chunks_yields_bounded_row_counts(

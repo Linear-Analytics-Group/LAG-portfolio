@@ -81,7 +81,7 @@ def test_concurrent_failures_trip_exactly_once() -> None:
     A ``threading.Barrier`` forces every thread to call
     ``record_failure`` at the same instant, exercising the real
     concurrent path this breaker is actually used under (see
-    ``BaseODataInventorySyncRunner.sync_records``) rather than only
+    ``BaseODataSyncRunner.sync_records``) rather than only
     ever calling it from one thread at a time.
 
     This does not, by itself, prove the internal lock is load-bearing:

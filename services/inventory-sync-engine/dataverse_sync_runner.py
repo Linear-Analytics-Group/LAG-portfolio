@@ -8,9 +8,9 @@ Wires together five collaborators and owns none of their logic itself:
 - ``runners.base.InventoryDomainMixin`` — source-agnostic,
   protocol-agnostic inventory domain logic (SKU dedup, binding to a
   composed source).
-- ``runners.odata.BaseODataInventorySyncRunner`` — domain-agnostic OData
-  v4 write-protocol logic (the idempotent alternate-key upsert loop),
-  reusable by any OData v4 destination.
+- ``lag_service_kit.runners.odata.BaseODataSyncRunner`` — domain-agnostic
+  OData v4 write-protocol logic (the idempotent alternate-key upsert
+  loop), reusable by any OData v4 destination.
 - ``runners.dataverse.DataverseInventorySyncRunner`` — combines the two
   bases above and adds only the Dataverse-specific pieces: the
   ``lagsol_inventoryitems`` entity set, the ``lagsol_skuid`` alternate
@@ -19,8 +19,8 @@ Wires together five collaborators and owns none of their logic itself:
   reading the ERP CSV feed. Composed into the runner here, at the
   entrypoint, rather than inherited — swapping to a different feed
   format for this same Dataverse sync means passing a different
-  ``sources.InventorySource`` instance below, with no change to
-  ``DataverseInventorySyncRunner`` itself.
+  ``lag_service_kit.sources.base.RecordSource`` instance below, with no
+  change to ``DataverseInventorySyncRunner`` itself.
 
 Environment
 -----------

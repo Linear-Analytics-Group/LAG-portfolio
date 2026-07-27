@@ -1,20 +1,25 @@
-"""Unit tests for runners.odata.BaseODataInventorySyncRunner.
+"""Unit tests for lag_service_kit.runners.odata.BaseODataSyncRunner.
 
 Every test uses ``max_workers=1``, making execution strictly
 sequential and every assertion deterministic — with more than one
 worker, whether a given record's request is "in flight" or "not yet
 started" when the breaker trips depends on scheduling, which is
 exactly the nondeterminism a focused unit test should avoid. The
-acceptance-level tests exercise the real, concurrent default instead.
+acceptance-level tests (in the inventory service) exercise the real,
+concurrent default instead. This class is destination/domain-agnostic
+scaffolding, tested here alongside the rest of ``lag_service_kit``
+rather than in any one service — the stub below uses made-up field
+names (``stub_items``/``stub_skuid``), not real inventory ones, to
+keep that agnosticism honest.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 import pytest
 import requests
 from lag_data_utils.clients.odata import ODataClient
-from runners.odata import BaseODataInventorySyncRunner
+from lag_service_kit.runners.odata import BaseODataSyncRunner
 
 pytestmark = pytest.mark.unit
 
@@ -47,7 +52,7 @@ class _StubODataClient(ODataClient):
         entity_set: str,
         alternate_key_name: str,
         key_value: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> requests.Response:
         self.calls += 1
         response = requests.Response()
@@ -58,7 +63,7 @@ class _StubODataClient(ODataClient):
         return response
 
 
-class _StubRunner(BaseODataInventorySyncRunner):
+class _StubRunner(BaseODataSyncRunner):
     """The minimum concrete subclass needed to exercise sync_records()."""
 
     dedupe_key = "sku_id"
@@ -71,7 +76,7 @@ class _StubRunner(BaseODataInventorySyncRunner):
     def alternate_key_field(self) -> str:
         return "stub_skuid"
 
-    def build_payload(self, row: Any) -> Dict[str, Any]:
+    def build_payload(self, row: Any) -> dict[str, Any]:
         return {}
 
     def load_settings(self) -> Any:

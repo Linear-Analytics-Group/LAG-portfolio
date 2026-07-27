@@ -5,7 +5,7 @@ calls its four hooks in the fixed order the template method promises,
 and that its exit-code decision is correct — in isolation from any real
 destination's ``sync_records()`` implementation. Whether ``sync_records()``
 itself keeps processing the rest of a batch after one record fails is a
-property of *that* method (see ``BaseODataInventorySyncRunner``'s own
+property of *that* method (see ``BaseODataSyncRunner``'s own
 tests and the acceptance-level idempotency tests), not of ``run()``:
 here, ``sync_records()`` is a stub returning a result dict directly, and
 these tests only check that ``run()`` interprets that dict correctly.
@@ -108,7 +108,7 @@ def test_run_reports_failure_even_when_most_records_succeeded() -> None:
 
     This deliberately does *not* test whether sync_records() kept
     processing records after a failure — that's
-    BaseODataInventorySyncRunner's own responsibility, covered
+    BaseODataSyncRunner's own responsibility, covered
     separately. Here, sync_records() is a stub that returns
     created=5, failed=1 directly, to make unambiguous that most of a
     batch succeeded and run() still correctly reports overall failure.

@@ -202,7 +202,7 @@ def dataverse_runner_factory(
     Returns
     -------
     Callable[..., DataverseInventorySyncRunner]
-        A callable taking a ``source`` (satisfying ``InventorySource``)
+        A callable taking a ``source`` (satisfying ``RecordSource``)
         plus any other ``DataverseInventorySyncRunner`` constructor
         keyword argument (e.g. ``failure_threshold``, ``max_workers``),
         returning a ready-to-``.run()`` ``DataverseInventorySyncRunner``.

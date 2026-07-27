@@ -27,14 +27,14 @@ LAG-portfolio/
 │       ├── requirements.txt
 │       ├── config.py                     # InventorySyncSettings — composes shared settings mixins
 │       ├── dataverse_sync_runner.py      # Entrypoint only — pairs a leaf runner with a source, then .run()
-│       ├── runners/                      # Domain + write-protocol axes — combined via multiple inheritance
-│       │   ├── __init__.py               # Exports InventoryDomainMixin, BaseODataInventorySyncRunner
+│       ├── run_mock_sync.py              # Zero-setup demo entrypoint — fakes, no Azure/network
+│       ├── test_connection.py            # Real-environment connectivity smoke test
+│       ├── runners/                      # Domain axis only — the write-protocol axis lives in lag_service_kit
+│       │   ├── __init__.py               # Exports InventoryDomainMixin
 │       │   ├── base.py                   # InventoryDomainMixin — dedupe + source binding (no client type)
-│       │   ├── odata.py                  # BaseODataInventorySyncRunner[ODataClient] — the upsert loop
 │       │   └── dataverse.py              # DataverseInventorySyncRunner — the only Dataverse-specific code
 │       └── sources/                      # Source-format axis — composed into a runner, never inherited
-│           ├── __init__.py               # Exports InventorySource, CsvInventorySource, JsonInventorySource
-│           ├── base.py                   # InventorySource protocol
+│           ├── __init__.py               # Exports CsvInventorySource, JsonInventorySource
 │           ├── csv.py                    # CsvInventorySource — the only CSV-specific code
 │           └── json.py                   # JsonInventorySource — the only JSON-specific code
 │
@@ -59,11 +59,18 @@ LAG-portfolio/
                 ├── __init__.py
                 ├── settings.py           # BaseServiceSettings (log_level) + find_repo_env_file()
                 ├── dataverse_settings.py # DataverseConnectionSettings Pydantic mixin
-                ├── logging.py            # configure_logging() — structured logging matrix
+                ├── azure_key_vault.py    # AzureKeyVaultSettingsSource — optional Key Vault-backed fields
+                ├── validation.py         # RecordValidationError, require_columns(), require_non_null()
+                ├── logging.py            # configure_logging() — structured (JSON) logging matrix
                 ├── dedupe.py             # dedupe_last_seen() — last-write-wins by key column
+                ├── circuit_breaker.py    # ConsecutiveFailureCircuitBreaker — any batch write loop
                 ├── readers/              # RecordReader protocol + Csv/Json/Parquet implementations
+                ├── sources/              # RecordSource, ChunkedRecordSource — source-composition contract,
+                │                         # promoted here since neither carries domain-specific knowledge
                 └── runners/
-                    └── base.py           # BaseSyncRunner[ClientT] — generic over the transport client type
+                    ├── base.py           # BaseSyncRunner[ClientT] — generic over the transport client type
+                    └── odata.py          # BaseODataSyncRunner[ODataClient] — the OData v4 upsert loop,
+                                          # promoted here for the same reason as sources/ above
 ```
 
 Both `shared/` packages are installed into `.venv` as editable packages
@@ -127,15 +134,24 @@ in this repo. They are not advisory.
    source-format × destination pairing) or an incorrect, permanent
    coupling (a destination that can only ever read one feed format).
    `services/inventory-sync-engine/runners/` and `sources/` are the
-   reference implementation of the standing pattern — apply this same
+   reference implementation of the domain-mixin and source-implementation
+   parts of the standing pattern; `shared/lag-service-kit/src/lag_service_kit/runners/odata.py`
+   and `sources/` hold the write-protocol base and source-composition
+   contract themselves — promoted there because neither carries any
+   inventory-specific knowledge, so a future service (orders, customers)
+   inherits both unchanged rather than duplicating them. Apply this same
    three-part shape whenever a service must support more than one
-   destination, wire protocol, or source format:
+   destination, wire protocol, or source format, and promote a
+   protocol-specific base or a source Protocol to `lag-service-kit` the
+   moment it has no domain-specific content left in it — do not leave it
+   sitting in a service "reference implementation" once that's true:
 
    - **Single inheritance, for axes that are genuinely hierarchical.**
      Increasing protocol specificity is a real hierarchy: `BaseClient` →
      `ODataClient` → `DataverseClient` in `shared/lag-data-utils/clients`,
      and, in lock step, `lag_service_kit.runners.base.BaseSyncRunner[ClientT]`
-     → a protocol-specific base (e.g. `runners/odata.py:BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient])`)
+     → a protocol-specific base (e.g.
+     `lag_service_kit.runners.odata:BaseODataSyncRunner(BaseSyncRunner[ODataClient])`)
      for the write loop against that protocol. `BaseSyncRunner` is generic
      over `ClientT` (bound to `BaseClient`) precisely so every class in
      one of these chains agrees on a single client type — narrowing it
@@ -150,16 +166,17 @@ in this repo. They are not advisory.
      inherit `BaseSyncRunner` or commit to any `ClientT`) combines with a
      protocol-specific base via multiple inheritance in the destination
      leaf class — e.g.
-     `class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataInventorySyncRunner)`.
+     `class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner)`.
      A future SAP/Salesforce destination on the same OData protocol
      writes a sibling leaf combining the same two bases; a future
      destination on a different wire protocol (SOAP, a bulk-upload REST
-     API) writes a sibling protocol base and still inherits the same
-     domain mixin unchanged. Neither base ever duplicates the other's
-     logic, and neither axis multiplies against the other.
+     API) writes a sibling protocol base in `lag-service-kit` and still
+     inherits the same domain mixin unchanged. Neither base ever
+     duplicates the other's logic, and neither axis multiplies against
+     the other.
 
      When a protocol base needs one piece of domain-supplied data —
-     e.g. `BaseODataInventorySyncRunner.sync_records()` needs a record's
+     e.g. `BaseODataSyncRunner.sync_records()` needs a record's
      business-key column name to log and to pass to `upsert_record()` —
      declare it as a bare, unassigned annotation on the protocol base
      (`dedupe_key: str`, no default), and let the domain mixin be the
@@ -169,13 +186,21 @@ in this repo. They are not advisory.
      place in the codebase where its value is ever set. Never give the
      protocol base its own default for a domain-owned attribute — that
      would silently fork the value across the two axes the moment either
-     side changed independently.
+     side changed independently. The same reasoning extends to a
+     per-run operational value that isn't domain-owned but is still a
+     service's own tuning decision (e.g. `max_workers`,
+     `failure_threshold`): `BaseODataSyncRunner.__init__` takes both
+     with no default of its own, mirroring
+     `ConsecutiveFailureCircuitBreaker.__init__`'s own no-default
+     `threshold` parameter — a service's `defaults.py` is the only place
+     either value is ever set.
    - **Constructor injection (composition, not inheritance), for
      per-run operational choices.** Which source feed a given run reads
      is not a property of the destination class — it varies
      independently, at runtime, from what the destination class is. A
      domain mixin's constructor takes a source collaborator satisfying a
-     `typing.Protocol` (e.g. `sources/base.py:InventorySource`, supplying
+     `typing.Protocol` (e.g.
+     `lag_service_kit.sources.base:RecordSource`, supplying
      `read_records() -> pd.DataFrame`) and the entrypoint pairs a leaf
      class with a concrete source instance
      (`DataverseInventorySyncRunner(source=CsvInventorySource())` in
@@ -202,9 +227,10 @@ in this repo. They are not advisory.
    precedent already in this codebase: `DataverseConnectionSettings`
    (`lag_data_utils.clients.dataverse`) lets `DataverseClient.from_settings()`
    accept any settings object with the right four attributes, with no
-   import of a concrete settings class; `sources/base.py:InventorySource`
-   and `ChunkedInventorySource` let any object with the right method(s)
-   act as a runner's source, with nothing to subclass.
+   import of a concrete settings class;
+   `lag_service_kit.sources.base:RecordSource` and `ChunkedRecordSource`
+   let any object with the right method(s) act as a runner's source,
+   with nothing to subclass.
 
    This applies to constructor parameters accepting a third-party or
    sealed SDK class just as much as to in-house types — e.g.

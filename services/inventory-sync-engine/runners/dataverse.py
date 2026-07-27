@@ -5,14 +5,17 @@ here: the ``lagsol_inventoryitems`` entity set, the ``lagsol_skuid``
 alternate key, the ``InventorySyncSettings``/``DataverseClient`` wiring,
 and the mapping from a generic inventory row to Dataverse's ``lagsol_``
 field schema. Everything else is composed from two independent bases:
-dedup and source reading from ``runners.base.InventoryDomainMixin``; the
-OData v4 upsert loop from ``runners.odata.BaseODataInventorySyncRunner``.
-Neither base duplicates the other's logic, and this class adds none of
-its own beyond the Dataverse-specific hooks. Source-feed reading is not
-inherited at all: the caller passes a ``sources.InventorySource``
-instance to the constructor (see ``InventoryDomainMixin.__init__``), so
-this same class works unchanged whether the feed is CSV, JSON, Parquet,
-or anything else.
+dedup and source reading from ``runners.base.InventoryDomainMixin``
+(inventory-domain, stays in this service); the OData v4 upsert loop
+from ``lag_service_kit.runners.odata.BaseODataSyncRunner``
+(destination/domain-agnostic, shared scaffolding). Neither base
+duplicates the other's logic, and this class adds none of its own
+beyond the Dataverse-specific hooks. Source-feed reading is not
+inherited at all: the caller passes a
+``lag_service_kit.sources.base.RecordSource`` instance to the
+constructor (see ``InventoryDomainMixin.__init__``), so this same
+class works unchanged whether the feed is CSV, JSON, Parquet, or
+anything else.
 """
 
 from typing import Any
@@ -25,9 +28,9 @@ from defaults import (
     DEFAULT_MAX_WORKERS,
 )
 from lag_data_utils.clients.dataverse import DataverseClient
+from lag_service_kit.runners.odata import BaseODataSyncRunner
+from lag_service_kit.sources.base import RecordSource
 from runners.base import InventoryDomainMixin
-from runners.odata import BaseODataInventorySyncRunner
-from sources import InventorySource
 
 #: This portfolio's shipped Dataverse schema — a different customer's
 #: environment overrides these at construction time (see README.md's
@@ -46,9 +49,7 @@ DEFAULT_FIELD_MAPPING: dict[str, str] = {
 }
 
 
-class DataverseInventorySyncRunner(
-    InventoryDomainMixin, BaseODataInventorySyncRunner
-):
+class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner):
     """Syncs ERP inventory records into Microsoft Dataverse.
 
     Notes
@@ -62,19 +63,21 @@ class DataverseInventorySyncRunner(
     A future destination that also speaks OData v4 (e.g. SAP S/4HANA
     Cloud, SharePoint Online) is added through a sibling module —
     ``runners/sap.py`` — with a leaf class combining the same two
-    bases (``InventoryDomainMixin``, ``BaseODataInventorySyncRunner``),
-    supplying only its own settings, client, entity set, alternate key,
-    and field mapping. A future destination that speaks a *different*
-    wire protocol (e.g. SOAP) instead combines ``InventoryDomainMixin``
-    with a new protocol-specific base (e.g. a future
-    ``runners.soap.BaseSoapInventorySyncRunner``) — the dedup and
-    source-reading logic in ``InventoryDomainMixin`` is reused either
-    way, never duplicated per protocol.
+    bases (``InventoryDomainMixin``,
+    ``lag_service_kit.runners.odata.BaseODataSyncRunner``), supplying
+    only its own settings, client, entity set, alternate key, and field
+    mapping. A future destination that speaks a *different* wire
+    protocol (e.g. SOAP) instead combines ``InventoryDomainMixin`` with
+    a new protocol-specific base (e.g. a future
+    ``lag_service_kit.runners.soap.BaseSoapSyncRunner``, promoted to
+    shared scaffolding the same way ``BaseODataSyncRunner`` already is)
+    — the dedup and source-reading logic in ``InventoryDomainMixin`` is
+    reused either way, never duplicated per protocol.
     """
 
     def __init__(
         self,
-        source: InventorySource,
+        source: RecordSource,
         dedupe_key: str = DEDUPE_KEY,
         entity_set: str = DEFAULT_ENTITY_SET,
         alternate_key_field: str = DEFAULT_ALTERNATE_KEY_FIELD,
@@ -87,7 +90,7 @@ class DataverseInventorySyncRunner(
 
         Parameters
         ----------
-        source : InventorySource
+        source : RecordSource
             The feed to read raw inventory records from.
         dedupe_key : str
             The source column uniquely identifying an inventory item.
@@ -104,22 +107,23 @@ class DataverseInventorySyncRunner(
             :data:`DEFAULT_FIELD_MAPPING`.
         max_workers : int
             Worker threads used to upsert records concurrently. Forwarded
-            to :meth:`~runners.odata.BaseODataInventorySyncRunner.__init__`
+            to
+            :meth:`~lag_service_kit.runners.odata.BaseODataSyncRunner.__init__`
             and, via :meth:`build_client`, used to size the destination
             client's HTTP connection pool to match. Defaults to
             :data:`~defaults.DEFAULT_MAX_WORKERS`.
         chunksize : int
             Row count per chunk when ``source`` also satisfies
-            ``sources.ChunkedInventorySource``. Forwarded to
+            ``lag_service_kit.sources.base.ChunkedRecordSource``.
+            Forwarded to
             :meth:`~runners.base.InventoryDomainMixin.__init__`. Ignored
             for a source that reads in one shot. Defaults to
             :data:`~defaults.DEFAULT_CHUNK_SIZE`.
         failure_threshold : int
             Consecutive upsert failures that trip
-            :meth:`~runners.odata.BaseODataInventorySyncRunner.sync_records`'s
-            circuit breaker. Forwarded to
-            :meth:`~runners.odata.BaseODataInventorySyncRunner.__init__`.
-            Defaults to :data:`~defaults.DEFAULT_FAILURE_THRESHOLD`.
+            ``BaseODataSyncRunner.sync_records``'s circuit breaker.
+            Forwarded to ``BaseODataSyncRunner.__init__``. Defaults to
+            :data:`~defaults.DEFAULT_FAILURE_THRESHOLD`.
 
         Returns
         -------

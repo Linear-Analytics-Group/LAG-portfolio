@@ -18,7 +18,11 @@ JSON_PATH: Path = (
 
 
 class JsonInventorySource:
-    """Reads inventory records from a JSON feed, satisfying ``InventorySource``.
+    """Reads inventory records from a JSON feed.
+
+    Satisfies ``lag_service_kit.sources.base.RecordSource`` structurally
+    — no explicit inheritance, per this repo's Protocols-over-inheritance
+    convention.
 
     Notes
     -----

@@ -86,8 +86,9 @@ at the file that needs fixing:
 ```
 unit/
 ├── lag_data_utils/           # BaseClient, ODataClient, DataverseClient
-├── lag_service_kit/          # dedupe, readers, settings, logging, BaseSyncRunner
-└── inventory_sync_engine/    # InventoryDomainMixin, BaseODataInventorySyncRunner,
+├── lag_service_kit/          # dedupe, readers, settings, logging,
+│                             # BaseSyncRunner, BaseODataSyncRunner
+└── inventory_sync_engine/    # InventoryDomainMixin,
                                # DataverseInventorySyncRunner, CsvInventorySource, JsonInventorySource
 ```
 

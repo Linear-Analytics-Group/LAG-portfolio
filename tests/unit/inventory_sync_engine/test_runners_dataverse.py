@@ -27,7 +27,7 @@ pytestmark = pytest.mark.unit
 
 
 class _StubSource:
-    """A minimal InventorySource test double returning an empty DataFrame."""
+    """A minimal RecordSource test double returning an empty DataFrame."""
 
     def read_records(self) -> pd.DataFrame:
         return pd.DataFrame()

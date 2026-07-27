@@ -13,4 +13,4 @@ msal>=1.22.0
 pydantic>=2.7.0
 pydantic-settings>=2.4.0
 lag-data-utils>=1.0.0
-lag-service-kit>=1.0.0
+lag-service-kit>=1.1.0

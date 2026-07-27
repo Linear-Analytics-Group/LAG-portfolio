@@ -605,6 +605,7 @@ requests==2.32.5 \
     #   -r requirements.in
     #   azure-core
     #   lag-data-utils
+    #   lag-service-kit
     #   msal
 six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \

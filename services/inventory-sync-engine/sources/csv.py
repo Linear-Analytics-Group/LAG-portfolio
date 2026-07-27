@@ -19,7 +19,11 @@ CSV_PATH: Path = (
 
 
 class CsvInventorySource:
-    """Reads inventory records from a CSV feed, satisfying ``InventorySource``.
+    """Reads inventory records from a CSV feed.
+
+    Satisfies ``lag_service_kit.sources.base.RecordSource`` structurally
+    — no explicit inheritance, per this repo's Protocols-over-inheritance
+    convention.
 
     Notes
     -----
@@ -64,8 +68,8 @@ class CsvInventorySource:
     def read_record_chunks(self, chunksize: int) -> Iterator[pd.DataFrame]:
         """Read the CSV feed in fixed-size row chunks.
 
-        Satisfies ``sources.base.ChunkedInventorySource``. Delegates to
-        ``CsvRecordReader.load_chunks``, the one reader that can
+        Satisfies ``lag_service_kit.sources.base.ChunkedRecordSource``.
+        Delegates to ``CsvRecordReader.load_chunks``, the one reader that can
         actually stream a file's rows in bounded memory (see its
         docstring for why this capability isn't part of every reader).
 

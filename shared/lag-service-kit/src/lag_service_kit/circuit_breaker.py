@@ -9,14 +9,15 @@ class ConsecutiveFailureCircuitBreaker:
     Destination- and protocol-agnostic: it only ever sees a stream of
     success/failure outcomes, never a client, a record, or an HTTP
     status code, so it is reusable by any future write loop regardless
-    of wire protocol (see ``runners.odata.BaseODataInventorySyncRunner``
-    for the one that uses it today).
+    of wire protocol (see
+    ``lag_service_kit.runners.odata.BaseODataSyncRunner`` for the one
+    that uses it today).
 
     Notes
     -----
     "Consecutive" is tracked in completion order, not submission order.
     Under concurrent execution (see
-    ``BaseODataInventorySyncRunner.sync_records``), several calls are
+    ``BaseODataSyncRunner.sync_records``), several calls are
     in flight at once, so there is no single well-defined "order" to
     count against — completion order is the only one this class can
     observe. A lone success interleaved among a run of failures resets
@@ -48,9 +49,12 @@ class ConsecutiveFailureCircuitBreaker:
             calling service's own operational tolerance (see e.g.
             ``defaults.DEFAULT_FAILURE_THRESHOLD`` in
             ``services/inventory-sync-engine``), not of this class —
-            mirroring ``CsvRecordReader.load_chunks`` and
-            ``dedupe_last_seen_chunks``, neither of which bakes in a
-            default ``chunksize``/``key`` either.
+            mirroring ``CsvRecordReader.load_chunks``,
+            ``dedupe_last_seen_chunks``, and
+            ``BaseODataSyncRunner.__init__``'s own
+            ``max_workers``/``failure_threshold`` parameters, none of
+            which bake in a default for a value that's genuinely a
+            service's own operational tuning decision.
 
         Returns
         -------
