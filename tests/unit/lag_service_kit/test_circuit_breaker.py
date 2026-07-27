@@ -1,7 +1,6 @@
 """Unit tests for lag_service_kit.circuit_breaker."""
 
 import threading
-from typing import List
 
 import pytest
 from lag_service_kit.circuit_breaker import ConsecutiveFailureCircuitBreaker
@@ -99,7 +98,7 @@ def test_concurrent_failures_trip_exactly_once() -> None:
     thread_count = 20
     breaker = ConsecutiveFailureCircuitBreaker(threshold=thread_count)
     barrier = threading.Barrier(thread_count)
-    trip_results: List[bool] = [False] * thread_count
+    trip_results: list[bool] = [False] * thread_count
 
     def worker(index: int) -> None:
         barrier.wait()

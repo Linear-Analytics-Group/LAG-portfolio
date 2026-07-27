@@ -30,7 +30,11 @@ class _StubSource:
     """A minimal RecordSource test double returning an empty DataFrame."""
 
     def read_records(self) -> pd.DataFrame:
-        return pd.DataFrame()
+        # pandas-stubs types the DataFrame constructor as Any; the
+        # explicit annotation asserts the real return type mypy
+        # --strict needs.
+        empty: pd.DataFrame = pd.DataFrame()
+        return empty
 
 
 class _FakeMsalApp:

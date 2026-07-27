@@ -4,7 +4,7 @@ Covers BaseServiceSettings, find_repo_env_file.
 """
 
 from pathlib import Path
-from typing import Any, ClassVar, Dict, Tuple
+from typing import Any, ClassVar
 
 import pytest
 from lag_service_kit.settings import BaseServiceSettings, find_repo_env_file
@@ -28,7 +28,7 @@ class _FakeKeyVaultSource:
         self.settings_cls = settings_cls
         self.vault_url = vault_url
 
-    def __call__(self) -> Dict[str, Any]:
+    def __call__(self) -> dict[str, Any]:
         return {"my_secret": "from-key-vault"}
 
 
@@ -37,7 +37,7 @@ class _SettingsWithASecret(BaseServiceSettings):
 
     my_secret: str = "unset"
 
-    vault_secret_fields: ClassVar[Tuple[str, ...]] = ("my_secret",)
+    vault_secret_fields: ClassVar[tuple[str, ...]] = ("my_secret",)
 
 
 def test_log_level_defaults_to_info(clean_env: pytest.MonkeyPatch) -> None:

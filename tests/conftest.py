@@ -7,7 +7,7 @@ Azure identity fabricates fake ones.
 """
 
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any, Callable
 
 import pandas as pd
 import pytest
@@ -16,7 +16,7 @@ from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource, JsonInventorySource
 
 #: Every environment variable a Dataverse-backed service's settings read.
-DATAVERSE_ENV_VARS: List[str] = [
+DATAVERSE_ENV_VARS: list[str] = [
     "AZURE_TENANT_ID",
     "AZURE_CLIENT_ID",
     "AZURE_CLIENT_SECRET",
@@ -120,7 +120,9 @@ def raw_inventory_records() -> pd.DataFrame:
         update — the later row should win after dedup, leaving 3 unique
         records.
     """
-    return pd.DataFrame(
+    # pandas-stubs types the DataFrame constructor as Any; the explicit
+    # annotation asserts the real return type mypy --strict needs.
+    records: pd.DataFrame = pd.DataFrame(
         [
             {"sku_id": "SKU-001", "item_name": "Widget", "unit_price": 9.99},
             {"sku_id": "SKU-002", "item_name": "Gadget", "unit_price": 19.99},
@@ -132,6 +134,7 @@ def raw_inventory_records() -> pd.DataFrame:
             {"sku_id": "SKU-003", "item_name": "Gizmo", "unit_price": 4.50},
         ]
     )
+    return records
 
 
 @pytest.fixture

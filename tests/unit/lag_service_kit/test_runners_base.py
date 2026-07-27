@@ -11,7 +11,7 @@ here, ``sync_records()`` is a stub returning a result dict directly, and
 these tests only check that ``run()`` interprets that dict correctly.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -51,7 +51,7 @@ class _RecordingRunner(BaseSyncRunner[_FakeClient]):
     """Records the hook call order, so run()'s sequence can be asserted."""
 
     def __init__(self, fail_settings: bool = False, fail_auth: bool = False):
-        self.calls: List[str] = []
+        self.calls: list[str] = []
         self._fail_settings = fail_settings
         self._client = _FakeClient()
         if fail_auth:
@@ -74,11 +74,15 @@ class _RecordingRunner(BaseSyncRunner[_FakeClient]):
 
     def load_records(self) -> pd.DataFrame:
         self.calls.append("load_records")
-        return pd.DataFrame([{"id": 1}, {"id": 2}])
+        # pandas-stubs types the DataFrame constructor as Any; the
+        # explicit annotation asserts the real return type mypy
+        # --strict needs.
+        records: pd.DataFrame = pd.DataFrame([{"id": 1}, {"id": 2}])
+        return records
 
     def sync_records(
         self, client: Any, records: pd.DataFrame
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         self.calls.append("sync_records")
         return {"created": len(records), "updated": 0, "failed": 0}
 
@@ -117,7 +121,7 @@ def test_run_reports_failure_even_when_most_records_succeeded() -> None:
     class _MostlySucceededRunner(_RecordingRunner):
         def sync_records(
             self, client: Any, records: pd.DataFrame
-        ) -> Dict[str, int]:
+        ) -> dict[str, int]:
             return {"created": 5, "updated": 0, "failed": 1}
 
     assert _MostlySucceededRunner().run() == 1

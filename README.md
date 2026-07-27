@@ -1009,6 +1009,20 @@ already-failing destination.
   in this portfolio — a documented scaling consideration, not a
   built or tested capability. The reactive strategy above is what
   actually ships and runs today.
+- **Write-Path Memory Footprint (Known Scope):** `BaseODataSyncRunner.sync_records()`
+  submits one `ThreadPoolExecutor` future per deduplicated record up
+  front — `max_workers` bounds how many run *concurrently*, but not how
+  many are held in memory awaiting a worker, unlike the read path
+  (`ChunkedRecordSource`/`dedupe_last_seen_chunks`), which streams in
+  bounded, `DEFAULT_CHUNK_SIZE`-sized chunks regardless of total feed
+  size. For the record volumes this portfolio targets, the whole
+  deduplicated set fits comfortably in memory as a single batch. A
+  future feed large enough for that to matter would need
+  `sync_records()` windowed the same way the read side already is —
+  submitting and draining one bounded window of futures at a time
+  instead of all of them at once. That windowing isn't built or tested
+  here; this is a documented scaling consideration, not a current
+  limitation of any workload this service runs today.
 
 ## Execution flow
 
@@ -1162,7 +1176,7 @@ that *is* committed.
 ```text
 LAG-portfolio/
 ├── .env                                    # Local secrets — git-ignored, see .env.example
-├── .env.example                            # Template for the 5 variables config.py reads
+├── .env.example                            # Template for the 6 variables config.py reads
 ├── pyproject.toml                          # [tool.mypy], [tool.pytest.ini_options], and the [project]/
 │                                            # [project.optional-dependencies] "dev"/"test" extras — this
 │                                            # repo's own dev/test tooling, never published (see below)
@@ -1303,6 +1317,7 @@ below, which needs neither.
    | `AZURE_CLIENT_SECRET` | Yes | Registered app's client secret |
    | `DATAVERSE_URL` | Yes | Root URL, e.g. `https://org.crm.dynamics.com` |
    | `LOG_LEVEL` | No (default `INFO`) | Root logging level |
+   | `AZURE_KEY_VAULT_URL` | No (default unset) | Optional Azure Key Vault URL — when set, the four values above are resolved from Key Vault instead; see "Secrets Management" below |
 
    `InventorySyncSettings` finds this file automatically by walking up from
    `config.py`'s own location — run the service from any working

@@ -25,15 +25,16 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
     records, write records, report results — without assuming a source
     format, a record schema, or a destination system. Concrete services
     subclass it, typically through an intermediate protocol-specific base
-    class (e.g., a future inventory service's
-    ``BaseODataInventorySyncRunner``), to supply those specifics.
+    class (e.g. this package's own
+    ``lag_service_kit.runners.odata.BaseODataSyncRunner``), to supply
+    those specifics.
 
     ``BaseSyncRunner`` is generic over ``ClientT``, the transport client
     type this run's destination uses (bound to
     ``lag_data_utils.clients.base.BaseClient``). A protocol-specific
     subclass fixes ``ClientT`` to the narrowest client type its
     destinations all share — e.g.
-    ``BaseODataInventorySyncRunner(BaseSyncRunner[ODataClient])`` — so
+    ``BaseODataSyncRunner(BaseSyncRunner[ODataClient])`` — so
     that every subclass in the hierarchy agrees on one client type
     for :meth:`build_client` and :meth:`sync_records`, rather than each
     narrowing it independently and violating the Liskov substitution
@@ -115,7 +116,7 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
             ``failed`` — the three every caller of :meth:`run` may rely
             on. A concrete implementation may add further protocol- or
             destination-specific keys beyond these three (e.g.
-            ``runners.odata.BaseODataInventorySyncRunner`` adds
+            ``lag_service_kit.runners.odata.BaseODataSyncRunner`` adds
             ``skipped`` for records never attempted after a circuit
             breaker trips); :meth:`run` never assumes anything beyond
             the three required keys, so an implementation is free to do

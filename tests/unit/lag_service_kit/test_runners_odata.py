@@ -90,7 +90,12 @@ class _StubRunner(BaseODataSyncRunner):
 
 
 def _records(count: int) -> pd.DataFrame:
-    return pd.DataFrame([{"sku_id": f"SKU-{i}"} for i in range(count)])
+    # pandas-stubs types the DataFrame constructor as Any; the explicit
+    # annotation asserts the real return type mypy --strict needs.
+    records: pd.DataFrame = pd.DataFrame(
+        [{"sku_id": f"SKU-{i}"} for i in range(count)]
+    )
+    return records
 
 
 def test_sync_records_reports_all_created_when_nothing_fails() -> None:

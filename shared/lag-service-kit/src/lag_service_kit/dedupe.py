@@ -24,7 +24,12 @@ def dedupe_last_seen(records: pd.DataFrame, key: str) -> pd.DataFrame:
     pd.DataFrame
         One row per unique ``key`` value.
     """
-    return records.drop_duplicates(subset=key, keep="last")
+    # pandas-stubs types drop_duplicates() as Any; the explicit
+    # annotation asserts the real return type mypy --strict needs.
+    deduped: pd.DataFrame = records.drop_duplicates(
+        subset=key, keep="last"
+    )
+    return deduped
 
 
 def dedupe_last_seen_chunks(
@@ -69,6 +74,10 @@ def dedupe_last_seen_chunks(
         for row in chunk.itertuples(index=False):
             latest_by_key[getattr(row, key)] = row
 
+    # pandas-stubs types the DataFrame constructor as Any; the explicit
+    # annotations assert the real return type mypy --strict needs.
     if not latest_by_key:
-        return pd.DataFrame(columns=columns or [])
-    return pd.DataFrame(latest_by_key.values())
+        empty: pd.DataFrame = pd.DataFrame(columns=columns or [])
+        return empty
+    deduped: pd.DataFrame = pd.DataFrame(latest_by_key.values())
+    return deduped

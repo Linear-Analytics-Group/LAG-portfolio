@@ -298,9 +298,9 @@ class DataverseClient(ODataClient):
         Double-checked locking guards the network round-trip, not the
         cache lookup: this method is called from every worker thread in
         a concurrent sync run (see
-        ``runners.odata.BaseODataInventorySyncRunner.sync_records``) to prevent
-        cases wherein every thread that happens to see the cache expire at
-        the same moment would independently fire its own
+        ``lag_service_kit.runners.odata.BaseODataSyncRunner.sync_records``)
+        to prevent cases wherein every thread that happens to see the
+        cache expire at the same moment would independently fire its own
         ``acquire_token_for_client`` call against Entra ID. The initial
         unlocked ``acquire_token_silent`` call keeps the common
         cache-hit path lock-free. Only a miss acquires

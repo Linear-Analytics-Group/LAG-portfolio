@@ -6,7 +6,7 @@ leaf class is needed to test its dedup/source-binding behavior in
 isolation.
 """
 
-from typing import Iterator, List
+from typing import Iterator
 
 import pandas as pd
 import pytest
@@ -38,7 +38,7 @@ class _StubChunkedSource:
     ``read_records`` was never called at all.
     """
 
-    def __init__(self, chunks: List[pd.DataFrame]) -> None:
+    def __init__(self, chunks: list[pd.DataFrame]) -> None:
         self._chunks = chunks
         self.requested_chunksize: int = -1
 

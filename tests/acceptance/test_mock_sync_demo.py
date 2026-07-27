@@ -18,15 +18,25 @@ pytestmark = pytest.mark.acceptance
 
 def test_main_runs_to_completion_with_no_env_vars_set(
     clean_env: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """main() succeeds with every real Dataverse/Azure env var unset.
+    """main() reaches sync completion with no real env vars set.
 
     clean_env clears the environment first — this is the concrete
     proof that no real .env file or credential is required at all.
+    The exit code alone can't prove this: ``run()`` returns ``1`` both
+    for an environment/config failure and for the demo's own harmless
+    simulated per-record failures (see
+    ``test_the_simulated_failure_rate_never_trips_the_circuit_breaker``
+    below), so this asserts on the "Sync complete" log line itself,
+    which only ever logs once every earlier error branch in ``run()``
+    (config, auth, source, validation, unexpected) has been passed.
     """
-    exit_code = run_mock_sync.main()
+    run_mock_sync.main()
 
-    assert exit_code in {0, 1}
+    lines = capsys.readouterr().out.strip().splitlines()
+
+    assert any('"message": "Sync complete' in line for line in lines)
 
 
 def test_the_simulated_failure_rate_never_trips_the_circuit_breaker(

@@ -6,7 +6,7 @@ a real network call or needs real Azure credentials.
 """
 
 from types import SimpleNamespace
-from typing import ClassVar, Dict, List, Tuple
+from typing import ClassVar
 
 import pytest
 from azure.core.exceptions import ResourceNotFoundError
@@ -28,9 +28,9 @@ class _FakeSecretClient:
     Protocol rather than the concrete class.
     """
 
-    def __init__(self, secrets: Dict[str, str]) -> None:
+    def __init__(self, secrets: dict[str, str]) -> None:
         self._secrets = secrets
-        self.requested_names: List[str] = []
+        self.requested_names: list[str] = []
 
     def get_secret(self, name: str) -> SimpleNamespace:
         self.requested_names.append(name)
@@ -45,7 +45,7 @@ class _StubSettings(BaseSettings):
     plain_field: str = "unset"
     secret_field: str = "unset"
 
-    vault_secret_fields: ClassVar[Tuple[str, ...]] = ("secret_field",)
+    vault_secret_fields: ClassVar[tuple[str, ...]] = ("secret_field",)
 
 
 def test_non_vault_field_returns_none_without_a_client_call() -> None:
