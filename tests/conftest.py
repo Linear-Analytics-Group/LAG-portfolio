@@ -12,6 +12,7 @@ from typing import Any, Callable
 import pandas as pd
 import pytest
 from lag_data_utils.clients.dataverse import DataverseClient
+from lag_service_kit.sources.base import RecordSource
 from runners.dataverse import DataverseInventorySyncRunner
 from sources import CsvInventorySource, JsonInventorySource
 
@@ -212,10 +213,10 @@ def dataverse_runner_factory(
     """
     from types import SimpleNamespace
 
-    def _build(source: object, **kwargs: Any) -> DataverseInventorySyncRunner:
-        runner = DataverseInventorySyncRunner(
-            source=source, **kwargs  # type: ignore[arg-type]
-        )
+    def _build(
+        source: RecordSource, **kwargs: Any
+    ) -> DataverseInventorySyncRunner:
+        runner = DataverseInventorySyncRunner(source=source, **kwargs)
         monkeypatch.setattr(
             runner,
             "load_settings",

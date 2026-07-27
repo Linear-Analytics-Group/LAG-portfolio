@@ -362,7 +362,11 @@ alias gpsync="gporigin && gpcloud"                                # Double-vault
   races / metadata corruption from Drive or iCloud filesystem hooks).
 - **Private cloud remote (`cloud`):** bare repo on Google Drive, bridges
   iMac / MacBook / iPad Pro (via Working Copy). Updates only on explicit push.
-- **Public remote (`origin`):** GitHub — public, live as of Phase 4 below.
+- **`origin` remote:** GitHub, `Linear-Analytics-Group/LAG-portfolio`.
+  Currently private; the intended eventual target for a public release
+  once the hardening and audit work below is complete (see "Current
+  Mobilization Status"). Visibility is flipped manually on GitHub, not
+  by anything in this repo's own tooling.
 
 ## Current Mobilization Status
 

@@ -131,6 +131,12 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner):
             ``BaseODataSyncRunner.sync_records`` holds in memory at
             once. Forwarded to ``BaseODataSyncRunner.__init__``.
             Defaults to :data:`~defaults.DEFAULT_WRITE_WINDOW_SIZE`.
+            Should be at least ``max_workers``, or some workers will
+            sit idle with no queued task — not validated here or in
+            ``BaseODataSyncRunner.__init__``, so passing a smaller
+            value silently degrades concurrency rather than raising an
+            error; see ``defaults.DEFAULT_WRITE_WINDOW_SIZE``'s own
+            docstring for why.
 
         Returns
         -------

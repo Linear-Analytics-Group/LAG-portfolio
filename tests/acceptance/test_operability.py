@@ -105,7 +105,7 @@ def test_one_failed_record_does_not_stop_the_rest_from_syncing(
 
     output = capsys.readouterr().out
     assert exit_code == 1
-    assert "2 created, 0 updated, 1 failed (of 3 records)" in output
+    assert "2 created, 0 updated, 1 failed, 0 skipped (of 3 records)" in output
     assert "FAILED sku_id=SKU-002" in output
 
 
@@ -127,5 +127,5 @@ def test_a_dropped_connection_on_one_record_does_not_stop_the_rest(
 
     output = capsys.readouterr().out
     assert exit_code == 1
-    assert "2 created, 0 updated, 1 failed (of 3 records)" in output
+    assert "2 created, 0 updated, 1 failed, 0 skipped (of 3 records)" in output
     assert "FAILED sku_id=SKU-002: ConnectionError" in output

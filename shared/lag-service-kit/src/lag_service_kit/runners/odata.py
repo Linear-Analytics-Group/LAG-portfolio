@@ -93,14 +93,20 @@ class BaseODataSyncRunner(BaseSyncRunner[ODataClient]):
             operational tuning decision.
         write_window_size : int
             Maximum number of upsert futures :meth:`sync_records` holds
-            in memory at once, submitted-but-not-yet-collected. Must be
-            at least ``max_workers`` — fewer would idle a worker that
-            could otherwise have a task queued — and is otherwise the
-            same kind of service-owned operational tuning decision as
+            in memory at once, submitted-but-not-yet-collected. Not
+            validated against ``max_workers`` here — the same kind of
+            service-owned operational tuning decision as
             ``max_workers`` and ``failure_threshold``, so it takes no
             default here either; see e.g.
             ``defaults.DEFAULT_WRITE_WINDOW_SIZE`` in
-            ``services/inventory-sync-engine``.
+            ``services/inventory-sync-engine``. Should be at least
+            ``max_workers``: a smaller value silently caps effective
+            concurrency at ``write_window_size`` instead (a worker
+            would otherwise sit idle with no queued task), rather than
+            raising an error — the same trust-the-caller convention
+            already used for
+            ``ConsecutiveFailureCircuitBreaker``'s ``threshold``,
+            which is likewise unvalidated.
         **kwargs : Any
             Forwarded, unexamined, to ``super().__init__()``.
 

@@ -51,11 +51,14 @@ DEFAULT_CHUNK_SIZE: int = 10_000
 #: bounds the read path's: rather than submitting one future per
 #: deduplicated record up front regardless of total feed size, at most
 #: this many are ever outstanding, with a completed one's result
-#: collected and a new one submitted in its place. Must be at least
-#: ``DEFAULT_MAX_WORKERS`` — fewer would leave a worker idle with
-#: nothing queued — 5x is enough headroom above it that a worker
-#: finishing one upsert almost always has its next one already
-#: waiting, without ever holding the whole batch's futures at once.
+#: collected and a new one submitted in its place. Should be at least
+#: ``DEFAULT_MAX_WORKERS`` — not validated at construction time (see
+#: ``BaseODataSyncRunner.__init__``'s own docstring), so a smaller
+#: value wouldn't raise an error, just silently cap effective
+#: concurrency at this value instead. 5x is enough headroom above it
+#: that a worker finishing one upsert almost always has its next one
+#: already waiting, without ever holding the whole batch's futures at
+#: once.
 DEFAULT_WRITE_WINDOW_SIZE: int = 50
 
 #: Consecutive upsert failures that trip

@@ -40,7 +40,7 @@ graph TD
         CSVSRC["sources/csv.py<br/>CsvInventorySource"]
         JSONSRC["sources/json.py<br/>JsonInventorySource"]
         CFG["config.py<br/>InventorySyncSettings"]
-        DEFAULTS["defaults.py<br/>DEDUPE_KEY · DEFAULT_MAX_WORKERS ·<br/>DEFAULT_CHUNK_SIZE · DEFAULT_WRITE_WINDOW_SIZE ·<br/>DEFAULT_FAILURE_THRESHOLD"]
+        DEFAULTS["defaults.py<br/>DEDUPE_KEY · DEFAULT_MAX_WORKERS ·<br/>DEFAULT_CHUNK_SIZE · DEFAULT_WRITE_WINDOW_SIZE ·<br/>DEFAULT_FAILURE_THRESHOLD · DEFAULT_REQUIRED_COLUMNS"]
     end
 
     subgraph "shared/lag-service-kit — cross-service scaffolding"
@@ -1029,7 +1029,14 @@ already-failing destination.
   without holding the whole batch's futures at once) — like
   `max_workers` and `failure_threshold`, `BaseODataSyncRunner.__init__`
   takes no default of its own for it, since a sensible number is a
-  service's own operational tuning decision, not this class's.
+  service's own operational tuning decision, not this class's. That
+  same convention means the `write_window_size >= max_workers`
+  relationship above is documented, not enforced: nothing raises if a
+  caller sets `write_window_size` lower, and the effect wouldn't be a
+  crash, just some workers sitting idle with nothing queued — the
+  same trust-the-caller stance this repo already takes with
+  `ConsecutiveFailureCircuitBreaker.threshold`, which is equally
+  unvalidated.
 
 ## Execution flow
 
@@ -1197,8 +1204,8 @@ LAG-portfolio/
 │       ├── config.py                        # InventorySyncSettings
 │       ├── dataverse_sync_runner.py         # Entrypoint — main() instantiates a leaf runner
 │       ├── defaults.py                      # DEDUPE_KEY, DEFAULT_MAX_WORKERS, DEFAULT_CHUNK_SIZE,
-│       │                                    # DEFAULT_WRITE_WINDOW_SIZE, DEFAULT_FAILURE_THRESHOLD —
-│       │                                    # this service's tuned numbers
+│       │                                    # DEFAULT_WRITE_WINDOW_SIZE, DEFAULT_FAILURE_THRESHOLD,
+│       │                                    # DEFAULT_REQUIRED_COLUMNS — this service's tuned numbers
 │       ├── runners/                          # Domain axis — the protocol axis lives in lag_service_kit
 │       │   ├── __init__.py                   # Exports InventoryDomainMixin
 │       │   ├── base.py                       # InventoryDomainMixin — dedupe, composes a source (no client type)
@@ -1375,9 +1382,12 @@ outcome — about 38% created, 60% updated, and 2% a transient failure
 per-record failure isolation and structured error logging (see
 "Circuit Breaker vs. Unconditional Retry Exhaustion" below), not a
 broken demo. The ~2% simulated failure rate is a deliberate, checked
-choice — comfortably under the circuit breaker's default
-`failure_threshold` of 5 total failures, so this demo can never trip
-it, regardless of dispatch order (see
+choice — comfortably below the circuit breaker's default
+`failure_threshold` of 5 in absolute count, and since the breaker
+only trips on *consecutive* failures (see "Consecutive, not
+Rate-Based" above), a couple of failures scattered at random across
+~100 records can never form a run of 5 in a row, so this demo can
+never trip it, regardless of dispatch order (see
 `tests/acceptance/test_mock_sync_demo.py`).
 
 For confirming a specific *real* Entra ID app registration and

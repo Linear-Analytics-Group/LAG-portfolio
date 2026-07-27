@@ -40,7 +40,7 @@ def test_new_records_are_reported_as_created(
 
     assert exit_code == 0
     output = capsys.readouterr().out
-    assert "3 created, 0 updated, 0 failed (of 3 records)" in output
+    assert "3 created, 0 updated, 0 failed, 0 skipped (of 3 records)" in output
 
 
 @responses.activate
@@ -56,7 +56,7 @@ def test_existing_records_are_updated_not_duplicated(
 
     assert exit_code == 0
     output = capsys.readouterr().out
-    assert "0 created, 3 updated, 0 failed (of 3 records)" in output
+    assert "0 created, 3 updated, 0 failed, 0 skipped (of 3 records)" in output
 
 
 @responses.activate
@@ -89,7 +89,10 @@ def test_rerunning_the_same_feed_converges_to_all_updates(
     first_exit_code = dataverse_runner_factory(csv_source).run()
     assert first_exit_code == 0
     first_output = capsys.readouterr().out
-    assert "3 created, 0 updated, 0 failed (of 3 records)" in first_output
+    assert (
+        "3 created, 0 updated, 0 failed, 0 skipped (of 3 records)"
+        in first_output
+    )
 
     responses.reset()
     responses.calls.reset()
@@ -99,4 +102,7 @@ def test_rerunning_the_same_feed_converges_to_all_updates(
 
     assert second_exit_code == 0
     second_output = capsys.readouterr().out
-    assert "0 created, 3 updated, 0 failed (of 3 records)" in second_output
+    assert (
+        "0 created, 3 updated, 0 failed, 0 skipped (of 3 records)"
+        in second_output
+    )

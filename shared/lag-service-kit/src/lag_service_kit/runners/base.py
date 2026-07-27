@@ -145,6 +145,17 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
         definition, unexpected — it is logged with its full traceback
         via :meth:`~logging.Logger.exception` rather than silently
         swallowed or left to crash the process uncaught.
+
+        The final summary log always reports ``created``, ``updated``,
+        and ``failed`` — the three keys :meth:`sync_records` must
+        always return — plus, generically, whichever further keys a
+        given implementation's result also carries (e.g.
+        ``lag_service_kit.runners.odata.BaseODataSyncRunner`` adds
+        ``skipped``), so the reported counts always sum to
+        ``total_records`` regardless of which protocol-specific base
+        produced them. This method still never assumes any particular
+        extra key exists — it reports whatever ``result`` actually
+        contains beyond the three required keys, without naming one.
         """
         configure_logging()
 
@@ -192,12 +203,28 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
             )
             return 1
 
-        logger.info(
-            "Sync complete: %d created, %d updated, %d failed (of %d records).",
+        core_keys = ("created", "updated", "failed")
+        extra_counts = {
+            key: value
+            for key, value in result.items()
+            if key not in core_keys
+        }
+
+        message = "Sync complete: %d created, %d updated, %d failed"
+        message_args: list[int] = [
             result["created"],
             result["updated"],
             result["failed"],
-            len(records),
+        ]
+        for key, value in extra_counts.items():
+            message += f", %d {key}"
+            message_args.append(value)
+        message += " (of %d records)."
+        message_args.append(len(records))
+
+        logger.info(
+            message,
+            *message_args,
             extra={
                 # "created" alone collides with LogRecord's own
                 # creation-timestamp attribute of the same name —
@@ -209,6 +236,10 @@ class BaseSyncRunner(ABC, Generic[ClientT]):
                 "records_updated": result["updated"],
                 "records_failed": result["failed"],
                 "total_records": len(records),
+                **{
+                    f"records_{key}": value
+                    for key, value in extra_counts.items()
+                },
             },
         )
         return 1 if result["failed"] else 0
