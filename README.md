@@ -40,7 +40,7 @@ graph TD
         CSVSRC["sources/csv.py<br/>CsvInventorySource"]
         JSONSRC["sources/json.py<br/>JsonInventorySource"]
         CFG["config.py<br/>InventorySyncSettings"]
-        DEFAULTS["defaults.py<br/>DEDUPE_KEY · DEFAULT_MAX_WORKERS ·<br/>DEFAULT_CHUNK_SIZE · DEFAULT_FAILURE_THRESHOLD"]
+        DEFAULTS["defaults.py<br/>DEDUPE_KEY · DEFAULT_MAX_WORKERS ·<br/>DEFAULT_CHUNK_SIZE · DEFAULT_WRITE_WINDOW_SIZE ·<br/>DEFAULT_FAILURE_THRESHOLD"]
     end
 
     subgraph "shared/lag-service-kit — cross-service scaffolding"
@@ -406,8 +406,8 @@ We chose **Constructor Injection** at the service layer for three
 critical enterprise reasons — a decision that has since generalized
 beyond `dedupe_key` to every tunable in `defaults.py`
 (`DEFAULT_MAX_WORKERS`, `DEFAULT_CHUNK_SIZE`,
-`DEFAULT_FAILURE_THRESHOLD`), each overridable the same way and never
-read from the environment:
+`DEFAULT_WRITE_WINDOW_SIZE`, `DEFAULT_FAILURE_THRESHOLD`), each
+overridable the same way and never read from the environment:
 
 1. **Separation of Concerns (Domain vs. Environment):** Environmental
    variables (`.env`) should govern deployment-specific secrets,
@@ -1009,20 +1009,27 @@ already-failing destination.
   in this portfolio — a documented scaling consideration, not a
   built or tested capability. The reactive strategy above is what
   actually ships and runs today.
-- **Write-Path Memory Footprint (Known Scope):** `BaseODataSyncRunner.sync_records()`
-  submits one `ThreadPoolExecutor` future per deduplicated record up
-  front — `max_workers` bounds how many run *concurrently*, but not how
-  many are held in memory awaiting a worker, unlike the read path
-  (`ChunkedRecordSource`/`dedupe_last_seen_chunks`), which streams in
-  bounded, `DEFAULT_CHUNK_SIZE`-sized chunks regardless of total feed
-  size. For the record volumes this portfolio targets, the whole
-  deduplicated set fits comfortably in memory as a single batch. A
-  future feed large enough for that to matter would need
-  `sync_records()` windowed the same way the read side already is —
-  submitting and draining one bounded window of futures at a time
-  instead of all of them at once. That windowing isn't built or tested
-  here; this is a documented scaling consideration, not a current
-  limitation of any workload this service runs today.
+- **Write-Path Memory Bound:** `BaseODataSyncRunner.sync_records()` holds
+  at most `write_window_size` upsert futures in memory at once —
+  submitted but not yet collected — rather than materializing one
+  future per deduplicated record up front regardless of total feed
+  size. Once that many are outstanding, it waits for at least one to
+  finish (`concurrent.futures.wait(..., return_when=FIRST_COMPLETED)`),
+  collects every future that completed, and submits one new future per
+  record still pending, repeating until the whole batch has been
+  submitted. This mirrors, on the write side, the same bound
+  `ChunkedRecordSource`/`dedupe_last_seen_chunks` already gave the read
+  side — the two sides no longer part ways once dedup ends. Records are
+  still submitted to the executor in `records`' own order regardless of
+  the window, so the circuit breaker's skip semantics and per-record
+  failure isolation are unaffected by windowing; `write_window_size`
+  changes only how many futures are ever held in memory at once. See
+  `defaults.DEFAULT_WRITE_WINDOW_SIZE` for this service's tuned value
+  (5x `DEFAULT_MAX_WORKERS`, keeping every worker fed a queued task
+  without holding the whole batch's futures at once) — like
+  `max_workers` and `failure_threshold`, `BaseODataSyncRunner.__init__`
+  takes no default of its own for it, since a sensible number is a
+  service's own operational tuning decision, not this class's.
 
 ## Execution flow
 
@@ -1085,8 +1092,8 @@ sequenceDiagram
 
     Runner->>Leaf: sync_records(client, records)
     Leaf->>Breaker: new ConsecutiveFailureCircuitBreaker(failure_threshold)
-    Note over Leaf,Dataverse: ThreadPoolExecutor(max_workers) dispatches<br/>every record's steps below concurrently
-    loop each deduplicated record (up to max_workers in flight at once)
+    Note over Leaf,Dataverse: ThreadPoolExecutor(max_workers) dispatches<br/>every record's steps below concurrently, at most<br/>write_window_size futures held in memory at once
+    loop each deduplicated record (up to max_workers in flight,<br/>up to write_window_size submitted-but-uncollected)
         Leaf->>Breaker: is_tripped?
         alt already tripped
             Breaker-->>Leaf: True
@@ -1190,7 +1197,8 @@ LAG-portfolio/
 │       ├── config.py                        # InventorySyncSettings
 │       ├── dataverse_sync_runner.py         # Entrypoint — main() instantiates a leaf runner
 │       ├── defaults.py                      # DEDUPE_KEY, DEFAULT_MAX_WORKERS, DEFAULT_CHUNK_SIZE,
-│       │                                    # DEFAULT_FAILURE_THRESHOLD — this service's tuned numbers
+│       │                                    # DEFAULT_WRITE_WINDOW_SIZE, DEFAULT_FAILURE_THRESHOLD —
+│       │                                    # this service's tuned numbers
 │       ├── runners/                          # Domain axis — the protocol axis lives in lag_service_kit
 │       │   ├── __init__.py                   # Exports InventoryDomainMixin
 │       │   ├── base.py                       # InventoryDomainMixin — dedupe, composes a source (no client type)

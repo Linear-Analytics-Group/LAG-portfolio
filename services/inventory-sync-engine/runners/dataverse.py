@@ -26,6 +26,7 @@ from defaults import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_FAILURE_THRESHOLD,
     DEFAULT_MAX_WORKERS,
+    DEFAULT_WRITE_WINDOW_SIZE,
 )
 from lag_data_utils.clients.dataverse import DataverseClient
 from lag_service_kit.runners.odata import BaseODataSyncRunner
@@ -85,6 +86,7 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner):
         max_workers: int = DEFAULT_MAX_WORKERS,
         chunksize: int = DEFAULT_CHUNK_SIZE,
         failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
+        write_window_size: int = DEFAULT_WRITE_WINDOW_SIZE,
     ) -> None:
         """Bind this run to a source feed and its Dataverse schema names.
 
@@ -124,6 +126,11 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner):
             ``BaseODataSyncRunner.sync_records``'s circuit breaker.
             Forwarded to ``BaseODataSyncRunner.__init__``. Defaults to
             :data:`~defaults.DEFAULT_FAILURE_THRESHOLD`.
+        write_window_size : int
+            Maximum upsert futures
+            ``BaseODataSyncRunner.sync_records`` holds in memory at
+            once. Forwarded to ``BaseODataSyncRunner.__init__``.
+            Defaults to :data:`~defaults.DEFAULT_WRITE_WINDOW_SIZE`.
 
         Returns
         -------
@@ -151,6 +158,7 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner):
             max_workers=max_workers,
             chunksize=chunksize,
             failure_threshold=failure_threshold,
+            write_window_size=write_window_size,
         )
         self._entity_set = entity_set
         self._alternate_key_field = alternate_key_field

@@ -12,7 +12,13 @@ to both of them.
 
 import logging
 from abc import abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Future,
+    ThreadPoolExecutor,
+    as_completed,
+    wait,
+)
 from typing import Any
 
 import pandas as pd
@@ -61,9 +67,10 @@ class BaseODataSyncRunner(BaseSyncRunner[ODataClient]):
         self,
         max_workers: int,
         failure_threshold: int,
+        write_window_size: int,
         **kwargs: Any,
     ) -> None:
-        """Set this run's upsert concurrency and failure tolerance.
+        """Set this run's upsert concurrency, failure tolerance, and window.
 
         Parameters
         ----------
@@ -84,6 +91,16 @@ class BaseODataSyncRunner(BaseSyncRunner[ODataClient]):
             ``dedupe_last_seen_chunks``, none of which bake in a
             default for a value that's genuinely a service's own
             operational tuning decision.
+        write_window_size : int
+            Maximum number of upsert futures :meth:`sync_records` holds
+            in memory at once, submitted-but-not-yet-collected. Must be
+            at least ``max_workers`` — fewer would idle a worker that
+            could otherwise have a task queued — and is otherwise the
+            same kind of service-owned operational tuning decision as
+            ``max_workers`` and ``failure_threshold``, so it takes no
+            default here either; see e.g.
+            ``defaults.DEFAULT_WRITE_WINDOW_SIZE`` in
+            ``services/inventory-sync-engine``.
         **kwargs : Any
             Forwarded, unexamined, to ``super().__init__()``.
 
@@ -103,6 +120,7 @@ class BaseODataSyncRunner(BaseSyncRunner[ODataClient]):
         super().__init__()
         self._max_workers = max_workers
         self._failure_threshold = failure_threshold
+        self._write_window_size = write_window_size
 
     @property
     @abstractmethod
@@ -260,11 +278,26 @@ class BaseODataSyncRunner(BaseSyncRunner[ODataClient]):
         ``lag_service_kit.circuit_breaker.ConsecutiveFailureCircuitBreaker``
         local to this call rather than storing one on ``self``, so a
         run's failure streak never leaks into a later, separate run on
-        the same instance. Every future is still submitted up front —
-        only futures the executor hasn't started running yet actually
-        benefit from skipping (see :meth:`_upsert_one`); a batch no
-        larger than :attr:`_max_workers` will already be fully in
-        flight by the time the breaker could trip.
+        the same instance.
+
+        Holds at most :attr:`_write_window_size` futures in memory at
+        once — submitted but not yet collected — rather than
+        materializing one future per deduplicated record up front
+        regardless of total feed size. Once that many are outstanding,
+        this blocks on ``concurrent.futures.wait(...,
+        return_when=FIRST_COMPLETED)`` for at least one to finish,
+        collects every future that completed, and submits one new one
+        per record still pending, repeating until every record has
+        been submitted. This bounds the write side's memory the same
+        way :attr:`~lag_service_kit.sources.base.ChunkedRecordSource`
+        and ``dedupe_last_seen_chunks`` already bound the read side's,
+        rather than the two sides parting ways once dedup ends. Records
+        are still submitted to the executor in ``records``' own order
+        regardless of the window, so with ``max_workers=1`` every
+        record is still attempted strictly in that order — windowing
+        changes only how many futures are ever held in memory at once,
+        never the order records are submitted or the circuit breaker's
+        skip semantics in :meth:`_upsert_one`.
         """
         result: dict[str, int] = {
             "created": 0,
@@ -275,11 +308,18 @@ class BaseODataSyncRunner(BaseSyncRunner[ODataClient]):
         breaker = ConsecutiveFailureCircuitBreaker(self._failure_threshold)
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-            futures = [
-                executor.submit(self._upsert_one, client, row, breaker)
-                for row in records.itertuples(index=False)
-            ]
-            for future in as_completed(futures):
+            in_flight: set[Future[str]] = set()
+            for row in records.itertuples(index=False):
+                if len(in_flight) >= self._write_window_size:
+                    done, in_flight = wait(
+                        in_flight, return_when=FIRST_COMPLETED
+                    )
+                    for future in done:
+                        result[future.result()] += 1
+                in_flight.add(
+                    executor.submit(self._upsert_one, client, row, breaker)
+                )
+            for future in as_completed(in_flight):
                 result[future.result()] += 1
 
         return result

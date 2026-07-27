@@ -44,6 +44,20 @@ DEFAULT_MAX_WORKERS: int = 10
 #: overhead, more peak memory) or lower it for the opposite trade-off.
 DEFAULT_CHUNK_SIZE: int = 10_000
 
+#: Maximum upsert futures ``BaseODataSyncRunner.sync_records()`` holds
+#: in memory at once, submitted but not yet collected (see its own
+#: docstring, which takes no default of its own for this either).
+#: Bounds the write path's memory the same way ``DEFAULT_CHUNK_SIZE``
+#: bounds the read path's: rather than submitting one future per
+#: deduplicated record up front regardless of total feed size, at most
+#: this many are ever outstanding, with a completed one's result
+#: collected and a new one submitted in its place. Must be at least
+#: ``DEFAULT_MAX_WORKERS`` — fewer would leave a worker idle with
+#: nothing queued — 5x is enough headroom above it that a worker
+#: finishing one upsert almost always has its next one already
+#: waiting, without ever holding the whole batch's futures at once.
+DEFAULT_WRITE_WINDOW_SIZE: int = 50
+
 #: Consecutive upsert failures that trip
 #: ``BaseODataSyncRunner.sync_records()``'s circuit breaker (see
 #: ``lag_service_kit.circuit_breaker.ConsecutiveFailureCircuitBreaker``),

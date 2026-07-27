@@ -6,7 +6,13 @@ worker, whether a given record's request is "in flight" or "not yet
 started" when the breaker trips depends on scheduling, which is
 exactly the nondeterminism a focused unit test should avoid. The
 acceptance-level tests (in the inventory service) exercise the real,
-concurrent default instead. This class is destination/domain-agnostic
+concurrent default instead. Every test also uses a
+``write_window_size`` smaller than its record count, so
+``sync_records()``'s windowed-submission loop actually runs (not just
+its final drain) without affecting outcomes: records are always
+submitted to the executor in ``records``' own order regardless of the
+window, so with ``max_workers=1`` the strict-sequential guarantee
+above holds unchanged. This class is destination/domain-agnostic
 scaffolding, tested here alongside the rest of ``lag_service_kit``
 rather than in any one service — the stub below uses made-up field
 names (``stub_items``/``stub_skuid``), not real inventory ones, to
@@ -101,7 +107,9 @@ def _records(count: int) -> pd.DataFrame:
 def test_sync_records_reports_all_created_when_nothing_fails() -> None:
     """A healthy run reports every record created, nothing skipped."""
     client = _StubODataClient(fail_count=0)
-    runner = _StubRunner(max_workers=1, failure_threshold=2)
+    runner = _StubRunner(
+        max_workers=1, failure_threshold=2, write_window_size=2
+    )
 
     result = runner.sync_records(client, _records(3))
 
@@ -118,7 +126,9 @@ def test_circuit_breaker_trips_and_skips_the_remaining_records() -> None:
     ever reaching the client.
     """
     client = _StubODataClient(fail_count=100)
-    runner = _StubRunner(max_workers=1, failure_threshold=2)
+    runner = _StubRunner(
+        max_workers=1, failure_threshold=2, write_window_size=2
+    )
 
     result = runner.sync_records(client, _records(5))
 
@@ -134,7 +144,9 @@ def test_a_success_before_the_threshold_prevents_tripping() -> None:
     one, so every record after it is genuinely attempted.
     """
     client = _StubODataClient(fail_count=1)
-    runner = _StubRunner(max_workers=1, failure_threshold=2)
+    runner = _StubRunner(
+        max_workers=1, failure_threshold=2, write_window_size=2
+    )
 
     result = runner.sync_records(client, _records(4))
 
@@ -145,7 +157,9 @@ def test_a_success_before_the_threshold_prevents_tripping() -> None:
 def test_failure_threshold_of_one_skips_after_a_single_failure() -> None:
     """A threshold of 1 trips on the very first failure."""
     client = _StubODataClient(fail_count=100)
-    runner = _StubRunner(max_workers=1, failure_threshold=1)
+    runner = _StubRunner(
+        max_workers=1, failure_threshold=1, write_window_size=2
+    )
 
     result = runner.sync_records(client, _records(4))
 
