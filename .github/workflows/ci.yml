@@ -15,14 +15,14 @@ concurrency:
 
 jobs:
   verify:
-    name: mypy, pydocstyle, pytest (Python 3.9), pac solution pack
+    name: mypy, pydocstyle, pytest (Python 3.13), pac solution pack
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.13"
           cache: pip
 
       - name: Install build tooling

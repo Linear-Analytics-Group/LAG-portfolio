@@ -3,7 +3,6 @@
 import threading
 from typing import (
     Any,
-    Optional,
     Protocol,
     cast,
     runtime_checkable,
@@ -310,7 +309,7 @@ class DataverseClient(ODataClient):
         thread behind it in the queue sees the now-populated cache on
         its second check and never issues a redundant request.
         """
-        result: Optional[dict[str, Any]] = self._msal_app.acquire_token_silent(
+        result: dict[str, Any] | None = self._msal_app.acquire_token_silent(
             scopes=self._scope, account=None
         )
         if not result:

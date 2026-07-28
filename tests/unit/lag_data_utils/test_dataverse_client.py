@@ -8,7 +8,7 @@ requested.
 
 import threading
 import time
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from lag_data_utils.clients.dataverse import (
@@ -24,8 +24,8 @@ class _FakeMsalApp:
     """A controllable stand-in for msal.ConfidentialClientApplication."""
 
     def __init__(self) -> None:
-        self.silent_result: Optional[dict[str, Any]] = None
-        self.for_client_result: Optional[dict[str, Any]] = None
+        self.silent_result: dict[str, Any] | None = None
+        self.for_client_result: dict[str, Any] | None = None
         self.for_client_call_count = 0
 
     def acquire_token_silent(  # type: ignore[no-untyped-def]
@@ -141,7 +141,7 @@ def test_concurrent_cache_miss_triggers_exactly_one_refresh(
 
     thread_count = 10
     barrier = threading.Barrier(thread_count)
-    results: list[Optional[str]] = [None] * thread_count
+    results: list[str | None] = [None] * thread_count
 
     def worker(index: int) -> None:
         barrier.wait()

@@ -1263,7 +1263,7 @@ LAG-portfolio/
 
 ## Local environment setup
 
-**Prerequisites:** Python 3.9+, a Dataverse environment with an
+**Prerequisites:** Python 3.13+, a Dataverse environment with an
 application user registered for the target Entra ID app — *unless*
 you just want to see the engine run: see "Zero-Setup Mock Execution"
 below, which needs neither.

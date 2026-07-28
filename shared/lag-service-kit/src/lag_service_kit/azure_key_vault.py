@@ -1,6 +1,6 @@
 """Azure Key Vault as a pydantic-settings source, for any LAG service."""
 
-from typing import Any, Optional, Protocol, Type
+from typing import Any, Protocol
 
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
@@ -16,7 +16,7 @@ class _SecretValue(Protocol):
     exposing ``.value`` satisfies this, real or faked, from Key Vault
     or any other secret store.
 
-    ``value`` is typed ``Optional[str]``, matching the real
+    ``value`` is typed ``str | None``, matching the real
     ``KeyVaultSecret.value`` exactly, because a secret can exist
     without a value (e.g. a disabled or soft-deleted version) — the
     SDK models that possibility instead of guaranteeing a string, and
@@ -33,7 +33,7 @@ class _SecretValue(Protocol):
     """
 
     @property
-    def value(self) -> Optional[str]:
+    def value(self) -> str | None:
         """Return the secret's value, or ``None`` if it has none."""
         ...
 
@@ -95,15 +95,15 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
 
     def __init__(
         self,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         vault_url: str,
-        secret_client: Optional[_SecretClientLike] = None,
+        secret_client: _SecretClientLike | None = None,
     ) -> None:
         """Bind this source to a Key Vault, or an injected fake for testing.
 
         Parameters
         ----------
-        settings_cls : Type[BaseSettings]
+        settings_cls : type[BaseSettings]
             The settings class this source will be asked to resolve
             fields for.
         vault_url : str
