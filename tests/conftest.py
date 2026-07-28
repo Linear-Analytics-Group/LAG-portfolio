@@ -92,7 +92,7 @@ def dataverse_client(monkeypatch: pytest.MonkeyPatch) -> DataverseClient:
 
         def acquire_token_for_client(
             self, *args: object, **kwargs: object
-        ) -> dict:  # type: ignore[type-arg]
+        ) -> dict[str, Any]:
             return {"access_token": FAKE_BEARER_TOKEN}
 
     monkeypatch.setattr(

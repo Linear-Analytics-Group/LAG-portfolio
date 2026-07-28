@@ -6,6 +6,8 @@ whatever a real local ``.env`` file happens to contain — these tests are
 hermetic regardless of the machine they run on.
 """
 
+from typing import Any
+
 import pytest
 from config import InventorySyncSettings
 from lag_data_utils.clients.dataverse import (
@@ -88,7 +90,7 @@ def test_settings_resolve_all_four_dataverse_fields_from_key_vault(
         def __init__(self, settings_cls: type, vault_url: str) -> None:
             pass
 
-        def __call__(self) -> dict:  # type: ignore[type-arg]
+        def __call__(self) -> dict[str, Any]:
             return {
                 "azure_tenant_id": "33333333-3333-3333-3333-333333333333",
                 "azure_client_id": "44444444-4444-4444-4444-444444444444",

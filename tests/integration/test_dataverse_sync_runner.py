@@ -9,6 +9,7 @@ Web API's HTTP responses.
 """
 
 import re
+from typing import Any
 
 import pytest
 import responses
@@ -39,7 +40,7 @@ class _FakeConfidentialClientApplication:
 
     def acquire_token_for_client(
         self, *args: object, **kwargs: object
-    ) -> dict:  # type: ignore[type-arg]
+    ) -> dict[str, Any]:
         return {"access_token": "fake-integration-test-token"}
 
 
