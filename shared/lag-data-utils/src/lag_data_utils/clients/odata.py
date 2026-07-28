@@ -1,7 +1,7 @@
 """Abstract OData v4 protocol layer shared by all OData-compliant connectors."""
 
 from abc import abstractmethod
-from typing import Any, Optional, cast
+from typing import Any, cast
 from urllib.parse import quote
 
 import requests
@@ -280,7 +280,7 @@ class ODataClient(BaseHttpClient):
         entity_set: str,
         alternate_key_name: str,
         key_value: str,
-        select_fields: Optional[list[str]] = None,
+        select_fields: list[str] | None = None,
     ) -> dict[str, Any]:
         """Retrieve a single record by its alternate key value.
 
@@ -340,11 +340,11 @@ class ODataClient(BaseHttpClient):
     def query_records(
         self,
         entity_set: str,
-        odata_filter: Optional[str] = None,
-        select_fields: Optional[list[str]] = None,
-        top: Optional[int] = None,
-        skip: Optional[int] = None,
-        order_by: Optional[str] = None,
+        odata_filter: str | None = None,
+        select_fields: list[str] | None = None,
+        top: int | None = None,
+        skip: int | None = None,
+        order_by: str | None = None,
     ) -> list[dict[str, Any]]:
         """Query a collection of records using OData v4 system query options.
 

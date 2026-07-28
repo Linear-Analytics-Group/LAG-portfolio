@@ -1,7 +1,7 @@
 """Base Pydantic settings shared by every LAG service, plus `.env` discovery."""
 
 from pathlib import Path
-from typing import ClassVar, Optional, Type
+from typing import ClassVar
 
 from lag_service_kit.azure_key_vault import AzureKeyVaultSettingsSource
 from pydantic import Field, field_validator
@@ -21,7 +21,7 @@ _VALID_LOG_LEVELS: frozenset[str] = frozenset(
 )
 
 
-def find_repo_env_file(start: Path) -> Optional[Path]:
+def find_repo_env_file(start: Path) -> Path | None:
     """Walk upward from a starting file looking for a `.env` file.
 
     Mirrors ``python-dotenv``'s default discovery behavior, so a service
@@ -36,7 +36,7 @@ def find_repo_env_file(start: Path) -> Optional[Path]:
 
     Returns
     -------
-    Optional[Path]
+    Path or None
         The path to the nearest `.env` file among ``start``'s parent
         directories, or ``None`` if none is found before reaching the
         filesystem root.
@@ -82,7 +82,7 @@ class BaseServiceSettings(BaseSettings):
     """
 
     log_level: str = Field(default="INFO")
-    azure_key_vault_url: Optional[str] = Field(default=None)
+    azure_key_vault_url: str | None = Field(default=None)
 
     vault_secret_fields: ClassVar[tuple[str, ...]] = ()
 
@@ -144,7 +144,7 @@ class BaseServiceSettings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
@@ -154,7 +154,7 @@ class BaseServiceSettings(BaseSettings):
 
         Parameters
         ----------
-        settings_cls : Type[BaseSettings]
+        settings_cls : type[BaseSettings]
             The concrete settings class being resolved.
         init_settings : PydanticBaseSettingsSource
             Values passed directly to the constructor.

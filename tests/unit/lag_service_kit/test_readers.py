@@ -8,7 +8,6 @@ identically from the caller's point of view.
 """
 
 from pathlib import Path
-from typing import Type
 
 import pandas as pd
 import pytest
@@ -138,7 +137,7 @@ def test_parquet_record_reader_raises_file_not_found_for_missing_path(
     "reader_cls", [CsvRecordReader, JsonRecordReader, ParquetRecordReader]
 )
 def test_every_reader_satisfies_the_record_reader_protocol(
-    reader_cls: Type[RecordReader],
+    reader_cls: type[RecordReader],
 ) -> None:
     """Every shipped reader structurally satisfies RecordReader."""
     assert isinstance(reader_cls(), RecordReader)

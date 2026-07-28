@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "lag-portfolio"
 version = "0.0.0"
 description = "Repo-wide dev/test tooling, never published — see shared/lag-data-utils and shared/lag-service-kit for the real packages"
-requires-python = ">=3.9"
+requires-python = ">=3.13"
 
 [project.optional-dependencies]
 dev = [
@@ -37,12 +37,13 @@ bypass-selection = true
 plugins = ["pydantic.mypy"]
 strict = true
 ignore_missing_imports = true
-# For type-checking purposes only — this plugin's synthesized BaseSettings
-# __init__ signatures use `X | Y` union syntax, which requires targeting
-# 3.10+ here even though the project's actual .venv runtime is 3.9. No
-# project source file uses 3.10-only syntax, so this doesn't change what
-# actually executes; it only affects which syntax mypy itself accepts.
-python_version = "3.10"
+# Pinned explicitly rather than inferred from the running interpreter,
+# so mypy's accepted syntax always matches this project's documented
+# floor (see `requires-python` above) regardless of which interpreter
+# happens to invoke it — an inferred version would silently drift if
+# CI's `actions/setup-python` or a contributor's local interpreter
+# ever moved ahead of `requires-python` without a matching bump.
+python_version = "3.13"
 # Standalone dev/test mock-data generator — see its own module docstring
 # for why it's outside this project's mypy --strict delivery contract.
 exclude = ["(^|/)generate_mock_data\\.py$"]

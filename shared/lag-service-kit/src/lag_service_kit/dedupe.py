@@ -1,6 +1,6 @@
 """Generic dedup utilities for append-only feed processing."""
 
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable
 
 import pandas as pd
 
@@ -66,7 +66,7 @@ def dedupe_last_seen_chunks(
         is returned rather than one with no columns at all.
     """
     latest_by_key: dict[Any, Any] = {}
-    columns: Optional[list[str]] = None
+    columns: list[str] | None = None
 
     for chunk in chunks:
         if columns is None:

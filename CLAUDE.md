@@ -294,16 +294,19 @@ in this repo. They are not advisory.
   specific submodule directly (`lag_service_kit.logging`, not a
   flat `lag_service_kit` re-export) remains the convention; only the
   *path style* changes, from relative to absolute.
-* **Modern Generic Typing (PEP 585):** Annotate with the builtin
-  collection types directly (`tuple[str, ...]`, `list[int]`,
-  `dict[str, int]`) rather than importing `Tuple`/`List`/`Dict` from
-  `typing`. Supported natively since Python 3.9 (this repo's floor —
-  see `pyproject.toml`'s `requires-python`), so no import is needed
-  and none should be added. This applies only to the builtin
-  collection generics; `Optional`/`Union` still require `typing` (or
-  PEP 604's `X | Y`, which needs Python 3.10+ or `from __future__
-  import annotations` — out of scope until the Python-version
-  migration) and are unaffected by this directive.
+* **Modern Generic Typing (PEP 585 and PEP 604):** Annotate with the
+  builtin collection and class types directly (`tuple[str, ...]`,
+  `list[int]`, `dict[str, int]`, `type[BaseSettings]`) rather than
+  importing `Tuple`/`List`/`Dict`/`Type` from `typing` — supported
+  natively since Python 3.9. Optional and union types use PEP 604's
+  `X | Y` syntax directly (`str | None`, not `Optional[str]`;
+  `int | str`, not `Union[int, str]`) rather than importing
+  `Optional`/`Union` from `typing` — supported natively since Python
+  3.10, safely below this repo's floor (see `pyproject.toml`'s
+  `requires-python`). No import is needed for any of this and none
+  should be added; `typing` is still needed for constructs PEP 585/604
+  don't cover (`Any`, `ClassVar`, `Protocol`, `TypeVar`, `Callable`,
+  `cast`, etc.).
 * **Line Length Limit:** All lines of code, comments, and docstrings must
   strictly stay within a maximum of 80 characters.
 * **Docstring Formatting:** Document all modules, classes, and public
@@ -493,4 +496,43 @@ later phase until the one above it is checked off.
     parameter (no default, mirroring `max_workers`/`failure_threshold`),
     tuned in this service via the new
     `defaults.DEFAULT_WRITE_WINDOW_SIZE`.
+- [X] **Phase 8 — Python Version Floor: 3.9 → 3.13**
+  - Bumped `requires-python` from `>=3.9` (end-of-life since October
+    2025) to `>=3.13` (supported until October 2029) across all three
+    `pyproject.toml` files, updated both shared packages' `classifiers`
+    to match, and updated `.github/workflows/ci.yml`'s pinned
+    interpreter and job name. `pyproject.toml`'s `[tool.mypy]`
+    `python_version` moved from the prior `3.10` workaround (needed
+    only because the real floor, 3.9, predated the pydantic mypy
+    plugin's 3.10+ union syntax) to `3.13`, now that there's no
+    remaining discrepancy between the documented floor and what mypy
+    is told to accept.
+  - Adopted PEP 604 union syntax (`X | Y`) in place of
+    `typing.Optional`/`typing.Union` across the 6 files that used it,
+    and PEP 585's builtin `type[X]` in place of `typing.Type[X]` across
+    the 3 files that used that (the latter was already valid under the
+    old 3.9 floor — a gap an earlier typing-consistency audit missed,
+    closed here since these exact files' `typing` imports were already
+    being touched). Updated the "Modern Generic Typing" style directive
+    to require PEP 604 alongside PEP 585 rather than deferring it "until
+    the Python-version migration."
+  - Regenerated `services/inventory-sync-engine/requirements.txt`
+    against a real Python 3.13.14 interpreter. Discovered and fixed a
+    real `pip-compile` pitfall in the process: by default it prefers
+    already-pinned versions from the *existing* lock file being
+    regenerated, so it kept trying to reuse the old `numpy==2.0.2` pin
+    — which has no Python 3.13 wheel and fails to compile from source
+    against a newer Clang — instead of resolving fresh. Fixed by adding
+    `--upgrade` to the documented regeneration command (now baked into
+    the command itself, not just this run), which re-resolved to
+    `numpy==2.5.1`/`pandas==3.0.5`/`pyarrow==25.0.0`, all with real
+    `cp313` wheels.
+  - Verified end-to-end on a real (not merely declared) Python 3.13.14
+    virtualenv: a clean install mirroring CI's exact sequence (build
+    both shared wheels, install them, install the regenerated lock
+    file, install dev/test extras), `mypy --strict` clean (71 files),
+    `pydocstyle --convention=numpy` clean, `pytest` 175/175 passing,
+    zero 80-char violations, and `run_mock_sync.py` running correctly
+    end-to-end. Done on a dedicated branch, not merged to `trunk` until
+    a deliberate, separate decision to do so.
 
