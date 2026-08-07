@@ -113,6 +113,13 @@ repository verifies itself (mypy, pydocstyle, pytest, CI), see
 | Power Platform solution | [Power Platform Solution](docs/power-platform.md) |
 | Repository layout | [Repository Layout](docs/repository-layout.md) |
 | Full local setup + CI verification | [Local Environment Setup](docs/setup.md) |
+| Governance (branching, commits, QA gates) | [Governance](docs/GOVERNANCE.md) |
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for commit conventions, quality
+gates, and review requirements; see [Governance](docs/GOVERNANCE.md)
+for the full repository policy.
 
 ## License
 

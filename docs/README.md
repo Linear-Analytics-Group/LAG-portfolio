@@ -43,6 +43,14 @@ the full rationale behind each design decision.
   Dataverse environment, the zero-setup mock demo, and this repo's
   verification/CI bar.
 
+## Governance
+
+- [Governance](GOVERNANCE.md) — branching strategy, commit
+  conventions, quality gates, dependency policy, and security
+  reporting.
+- [Contributing](../CONTRIBUTING.md) — the short version, for anyone
+  opening a pull request.
+
 ---
 
 ← [Back to README](../README.md)
