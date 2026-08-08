@@ -82,6 +82,21 @@ def test_dedupe_key_can_be_overridden() -> None:
     assert runner.dedupe_key == "item_sku"
 
 
+def test_required_columns_can_be_overridden() -> None:
+    """A customer's own schema can name different required columns.
+
+    Proves the override actually reaches ``InventoryDomainMixin``
+    through this leaf class's constructor — the only one any real
+    caller ever instantiates directly (``InventoryDomainMixin`` itself
+    is never constructed on its own in production code).
+    """
+    runner = DataverseInventorySyncRunner(
+        source=_StubSource(), required_columns=("warehouse_code",)
+    )
+
+    assert runner.required_columns == ("warehouse_code",)
+
+
 def test_entity_set_and_alternate_key_field_can_be_overridden() -> None:
     """A differently-shaped Dataverse schema overrides both defaults."""
     runner = DataverseInventorySyncRunner(
@@ -124,6 +139,24 @@ def test_build_payload_field_mapping_can_be_overridden() -> None:
         "contoso_skucode": "SKU-001",
         "contoso_qty": 42,
     }
+
+
+def test_field_mapping_default_is_not_shared_between_instances() -> None:
+    """Mutating one runner's field mapping must not corrupt another's.
+
+    ``field_mapping``'s default is ``DEFAULT_FIELD_MAPPING``, a single
+    module-level dict evaluated once at import time. Storing it on
+    ``self`` without copying would make every runner built with no
+    override alias that same dict object; this proves each instance
+    instead owns an independent copy.
+    """
+    runner_a = DataverseInventorySyncRunner(source=_StubSource())
+    runner_b = DataverseInventorySyncRunner(source=_StubSource())
+
+    runner_a._field_mapping["item_name"] = "mutated"
+
+    assert runner_b._field_mapping["item_name"] == "lagsol_name"
+    assert DEFAULT_FIELD_MAPPING["item_name"] == "lagsol_name"
 
 
 def test_build_client_pool_size_defaults_to_twice_max_workers(

@@ -26,6 +26,7 @@ from defaults import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_FAILURE_THRESHOLD,
     DEFAULT_MAX_WORKERS,
+    DEFAULT_REQUIRED_COLUMNS,
     DEFAULT_WRITE_WINDOW_SIZE,
 )
 from lag_data_utils.clients.dataverse import DataverseClient
@@ -80,6 +81,7 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner):
         self,
         source: RecordSource,
         dedupe_key: str = DEDUPE_KEY,
+        required_columns: tuple[str, ...] = DEFAULT_REQUIRED_COLUMNS,
         entity_set: str = DEFAULT_ENTITY_SET,
         alternate_key_field: str = DEFAULT_ALTERNATE_KEY_FIELD,
         field_mapping: dict[str, str] = DEFAULT_FIELD_MAPPING,
@@ -97,6 +99,14 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner):
         dedupe_key : str
             The source column uniquely identifying an inventory item.
             Defaults to :data:`~defaults.DEDUPE_KEY`.
+        required_columns : tuple[str, ...]
+            Column names (besides ``dedupe_key``, always required
+            separately) that every record read from ``source`` must
+            carry. Forwarded to
+            :meth:`~runners.base.InventoryDomainMixin.__init__`, which
+            checks it in :meth:`~runners.base.InventoryDomainMixin.load_records`
+            before dedup. Defaults to
+            :data:`~defaults.DEFAULT_REQUIRED_COLUMNS`.
         entity_set : str
             The pluralized logical name of the Dataverse inventory
             entity collection. Defaults to :data:`DEFAULT_ENTITY_SET`.
@@ -161,6 +171,7 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner):
         super().__init__(
             source=source,
             dedupe_key=dedupe_key,
+            required_columns=required_columns,
             max_workers=max_workers,
             chunksize=chunksize,
             failure_threshold=failure_threshold,
