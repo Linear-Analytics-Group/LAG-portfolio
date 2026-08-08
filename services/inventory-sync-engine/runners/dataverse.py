@@ -168,7 +168,7 @@ class DataverseInventorySyncRunner(InventoryDomainMixin, BaseODataSyncRunner):
         )
         self._entity_set = entity_set
         self._alternate_key_field = alternate_key_field
-        self._field_mapping = field_mapping
+        self._field_mapping = dict(field_mapping)
 
     @property
     def entity_set(self) -> str:
