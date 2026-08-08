@@ -22,6 +22,7 @@ This document outlines the operational policies governing source control, qualit
 * **Strict Type Safety:** Python modules must pass `mypy --strict` with zero type warnings or un-typed function definitions.
 * **Documentation Compliance:** Codebase docstrings follow `pydocstyle` (NumPy convention) to guarantee clear interface descriptions.
 * **Centralized Testing:** Changes must include unit or integration tests mirroring the architectural layer under modification (`shared/lag-data-utils`, `shared/lag-service-kit`, or `services/*`).
+* **Enforced Coverage:** CI runs `pytest --cov-fail-under=100` against every production package — a genuine coverage regression fails the build; it is not merely a reported metric.
 
 ## 4. Dependency & Package Governance
 * **Library vs. Application Decoupling:** Shared libraries maintain loose lower bounds (`>=`) to avoid resolver conflicts, while services utilize hash-pinned lockfiles (`requirements.txt`) generated via `pip-compile`.
