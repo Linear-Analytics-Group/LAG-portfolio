@@ -1,7 +1,7 @@
 # Linear Analytics Group - Dataverse OData Sync Engine
 
-A Python service that migrates ERP inventory data into Microsoft Dataverse via 
-the OData Web API, utilizing an extensible, multi-layer architecture designed 
+A Python service that migrates ERP inventory data into Microsoft Dataverse via
+the OData Web API, utilizing an extensible, multi-layer architecture designed
 to readily adopt alternative enterprise destination systems.
 
 **[Full documentation index →](docs/README.md)**
@@ -40,27 +40,27 @@ to readily adopt alternative enterprise destination systems.
 
 Inventory data lives in an ERP system as a flat, append-only feed. Microsoft
 Dataverse — the system of record for downstream Power Platform apps — needs
-that data kept in sync.  This sync should be maintained without creating 
-duplicate records, without needing manual reconciliation, and without making 
+that data kept in sync. This sync should be maintained without creating
+duplicate records, without needing manual reconciliation, and without making
 format assumptions related to the source or destination.
 
-This solution  solves three key problems:
+This solution solves three key problems:
 
 1. **Sync inventory records into Dataverse idempotently.** The sync prevents
-   record duplication, preventing the creation of duplicate or corrupt records, 
+   record duplication, preventing the creation of duplicate or corrupt records,
    even when prior runs fail.
 2. **Source and Destination Agnostic.** Modular architecture separates the
-   service kit from the service- supporting various source and destination
+   service kit from the service — supporting various source and destination
    formats (e.g. CSV, JSON, Parquet) and solutions.
-3. **Operable beyond simple execution.** Structured machine-parseable logs, 
-   validated configuration, and strict typing make failures diagnosable in 
+3. **Operable beyond simple execution.** Structured machine-parseable logs,
+   validated configuration, and strict typing make failures diagnosable in
    production and support integration with external log solutions
    (e.g. Azure Monitor Log Analytics, Datadog, ELK Stack, etc.)
 
 ## Architecture
 
 The repository is split into three layers, supporting separation of concerns.
-Each layer holds a single responsibility and one-way dependency on the layer 
+Each layer holds a single responsibility and one-way dependency on the layer
 below it. The full layer diagram is large — see it at full size in
 [Architecture Deep-Dive](docs/architecture.md#layer-diagram); the table
 below is the at-a-glance summary:
