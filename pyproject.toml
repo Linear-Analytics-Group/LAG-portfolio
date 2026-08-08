@@ -70,3 +70,20 @@ markers = [
     "unit: isolated tests of a single class or function",
 ]
 addopts = "--strict-markers"
+
+[tool.coverage.run]
+# test_connection.py is a manual connectivity smoke test, run by hand
+# against a real Dataverse environment and real Entra ID credentials
+# (see its own module docstring) — not business logic, and not
+# intended for automated testing. Its error-handling branches
+# (ValidationError, AuthenticationError) are the exact same
+# caught-and-logged pattern already proven in
+# tests/acceptance/test_operability.py at a different call site;
+# mocking MSAL and HTTP here to re-prove the same pattern a third time
+# would inflate the coverage percentage without adding confidence.
+# Mirrors generate_mock_data.py's exclusion from mypy --strict, above,
+# for the same reason: explicitly and visibly excluded, not silently
+# absent.
+omit = [
+    "services/inventory-sync-engine/test_connection.py",
+]
