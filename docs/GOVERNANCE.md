@@ -7,7 +7,7 @@ This document outlines the operational policies governing source control, qualit
 ## 1. Branching & Deployment Strategy
 * **Trunk-Based Development:** The `trunk` (or `main`) branch represents release-ready software at all times.
 * **Short-Lived Feature Branches:** All active work takes place on isolated feature branches formatted as `<type>/<short-description>` (e.g., `feat/chunked-reader`, `fix/token-lock`).
-* **Pull Request Enforcement:** Direct pushes to `trunk` are disabled. Merges require passing status checks (CI) and code review approval.
+* **Pull Request Enforcement:** Direct pushes to `trunk` are prohibited by policy, enforced via GitHub branch protection rules configured on this repository (outside this repository's own tracked files). Merges require passing status checks (CI) and code review approval.
 
 ## 2. Commit & History Standards
 * **Conventional Commits:** All commit messages must follow the standard specification:
