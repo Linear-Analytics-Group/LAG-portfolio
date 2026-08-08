@@ -210,5 +210,5 @@ def main() -> int:
     return _DemoDataverseInventorySyncRunner(source=CsvInventorySource()).run()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover — entrypoint, not import-time code
     raise SystemExit(main())

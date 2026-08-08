@@ -92,7 +92,7 @@ class ODataClient(BaseHttpClient):
             The fully-qualified base URL for the target OData service
             (e.g., ``"https://org.crm.dynamics.com/api/data/v9.2"``).
         """
-        pass
+        pass  # pragma: no cover — abstract; every concrete subclass overrides this
 
     # ------------------------------------------------------------------
     # Internal helpers

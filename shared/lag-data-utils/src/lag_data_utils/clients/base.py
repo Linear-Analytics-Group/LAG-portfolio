@@ -106,4 +106,4 @@ class BaseClient(ABC):
         >>> token = client.acquire_bearer_token()
         >>> headers = {"Authorization": f"Bearer {token}"}
         """
-        pass
+        pass  # pragma: no cover — abstract; every concrete subclass overrides this

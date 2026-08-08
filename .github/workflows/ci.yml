@@ -64,7 +64,13 @@ jobs:
           tests
 
       - name: Test suite (tests/)
-        run: pytest tests/ --cov --cov-report=term-missing
+        run: >
+          pytest tests/
+          --cov=lag_data_utils
+          --cov=lag_service_kit
+          --cov=services
+          --cov-report=term-missing
+          --cov-fail-under=100
 
       - uses: actions/setup-dotnet@v4
         with:
