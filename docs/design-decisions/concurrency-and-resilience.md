@@ -16,57 +16,59 @@ in-flight write futures.
 
 ## Multi-Threaded Concurrency vs. OData v4 `$batch`
 
-To scale the execution speed of the sync engine beyond sequential, 
-record-by-record writes, we analyzed two standard architectural patterns for 
-accelerating I/O-bound REST workloads: OData v4 `$batch` processing and 
+To scale the execution speed of the sync engine beyond sequential,
+record-by-record writes, we analyzed two standard architectural patterns for
+accelerating I/O-bound REST workloads: OData v4 `$batch` processing and
 client-side multi-threading.
 
-We deliberately chose a **multi-threaded concurrency pool** over `$batch` 
-operations. This approach achieves maximum performance gains while preserving 
-our core domain safety guarantees and keeping the transport layer lightweight.
+We deliberately chose a **multi-threaded concurrency pool** over `$batch`
+operations. This preserves per-record failure isolation and keeps the
+transport layer lightweight, at the cost of the connection-overhead
+savings `$batch` would otherwise provide.
 
 ### The `$batch` Evaluation & The Changeset Trap
 
-OData v4 defines a `$batch` endpoint where multiple operations are packed into a 
-single `multipart/mixed` HTTP POST request. While this reduces TCP/TLS 
-connection handshake overhead from $N$ to roughly $N/1000$ (matching the 
+OData v4 defines a `$batch` endpoint where multiple operations are packed into a
+single `multipart/mixed` HTTP POST request. While this reduces TCP/TLS
+connection handshake overhead by roughly three orders of magnitude — one
+handshake per 1,000 operations instead of one per operation (matching the
 Dataverse batch limit), it introduces notable operational trade-offs:
-* **The Atomic Rollback Conflict:** OData batching supports *Changesets*—where 
-all operations in the group are treated as a single atomic transaction. If a 
-single payload in a batch of 1,000 fails validation, the entire batch rolls 
-back. This directly violates our primary acceptance criterion- that one failed 
-record must never corrupt or roll back successful writes for adjacent, 
+* **The Atomic Rollback Conflict:** OData batching supports *Changesets*—where
+all operations in the group are treated as a single atomic transaction. If a
+single payload in a batch of 1,000 fails validation, the entire batch rolls
+back. This directly violates our primary acceptance criterion — that one failed
+record must never corrupt or roll back successful writes for adjacent,
 unrelated records.
-* **The Standalone Parsing Overhead:** Bypassing the rollback trap requires 
-configuring each batch operation as an independent, non-changeset execution 
-block. However, Python's `requests` library lacks built-in OData batch 
-parser mechanisms. Implementing this would require writing, testing, and 
-maintaining a custom parser to build, serialize, and deserialize complex 
-multipart MIME streams inside the `ODataClient` class, dramatically increasing 
+* **The Standalone Parsing Overhead:** Bypassing the rollback trap requires
+configuring each batch operation as an independent, non-changeset execution
+block. However, Python's `requests` library lacks built-in OData batch
+parser mechanisms. Implementing this would require writing, testing, and
+maintaining a custom parser to build, serialize, and deserialize complex
+multipart MIME streams inside the `ODataClient` class, dramatically increasing
 the risk of transport-layer regression.
-* **API Rate-Limit Parity:** Contrary to common assumptions, Microsoft 
-Dataverse service protection and daily entitlement quotas count individual 
-operations *inside* a batch request against your user allocations. While 
-`$batch` reduces network round-trip latency, it does not bypass the rate-limit 
-throttling bounds, yet introduces massive client-side overhead to parse and 
+* **API Rate-Limit Parity:** Contrary to common assumptions, Microsoft
+Dataverse service protection and daily entitlement quotas count individual
+operations *inside* a batch request against your user allocations. While
+`$batch` reduces network round-trip latency, it does not bypass the rate-limit
+throttling bounds, yet introduces massive client-side overhead to parse and
 manage.
 
 ### The Winning Solution: Client-Side Multi-Threading
 
-Instead of grouping requests on the server, we implemented a controlled thread 
-execution pool using a thread-safe connection session manager. This choice 
-unlocked several key advantages:
+Instead of grouping requests on the server, we implemented a controlled thread
+execution pool using a thread-safe connection session manager. This has
+three concrete advantages:
 
-* **Granular Isolation & Fault Tolerance:** Each API write is processed on its 
-own thread- a failed record is caught, logged, and isolated instantly. 
+* **Granular Isolation & Fault Tolerance:** Each API write is processed on its
+own thread — a failed record is caught, logged, and isolated instantly.
 The sync engine continues executing the rest of the queue unimpeded.
-* **Native Connection Pooling:** By pairing multi-threading with a thread-safe 
-connection adapter, we reuse TCP handshakes at the transport layer, achieving 
-nearly identical latency optimization to batching without the structural 
+* **Native Connection Pooling:** By pairing multi-threading with a thread-safe
+connection adapter, we reuse TCP handshakes at the transport layer, achieving
+nearly identical latency optimization to batching without the structural
 complexity of MIME parsing.
-* **Dynamic Concurrency Throttling:** Client-side concurrency allows us to 
-easily listen to Dataverse's `Retry-After` HTTP headers. If we hit service 
-protection limits, we can dynamically back off or queue-throttle specific 
+* **Dynamic Concurrency Throttling:** Client-side concurrency allows us to
+easily listen to Dataverse's `Retry-After` HTTP headers. If we hit service
+protection limits, we can dynamically back off or queue-throttle specific
 worker threads rather than stalling an entire 1,000-record batch.
 
 ## Circuit Breaker vs. Unconditional Retry Exhaustion

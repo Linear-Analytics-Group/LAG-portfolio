@@ -17,7 +17,7 @@ supports.
 ## Layer Diagram
 
 The repository is split into three layers, supporting separation of concerns.
-Each layer holds a single responsibility and one-way dependency on the layer 
+Each layer holds a single responsibility and one-way dependency on the layer
 below it. This is a structural view, consolidated to the components that
 define each layer's boundary — file-level detail (e.g. every constant in
 `defaults.py`) lives in the table and prose below, not in the diagram:
@@ -123,16 +123,16 @@ which is a per-run operational choice.
 
 A typical split calls for "library vs. application" — transport code in
 `lag-data-utils`, everything else in the service. That approach fails to
-support additional services (e.g., config loading, logging setup, and 
-the source file DataFrame conversion used to support record deduplication). 
-Under a traditional split, each new service would result in duplicated code 
-or a bloated transport layer- compromising the clean boundaries of 
-`lag-data-utils` and preventing delivery of a clean and maintainable 
+support additional services (e.g., config loading, logging setup, and
+the source file DataFrame conversion used to support record deduplication).
+Under a traditional split, each new service would result in duplicated code
+or a bloated transport layer — compromising the clean boundaries of
+`lag-data-utils` and preventing delivery of a clean and maintainable
 transport layer.
 
 `lag-service-kit` exists to hold code and logic that is reusable across
-*any* future service, independent of any transport concern. This approach 
-prevents transport layer dependency on any specific configuration framework. 
+*any* future service, independent of any transport concern. This approach
+prevents transport layer dependency on any specific configuration framework.
 
 Concretely:
 
@@ -145,15 +145,15 @@ Concretely:
   Dataverse alternate keys or inventory columns — any service that talks to
   a different destination system or ingests a different kind of record can
   leverage this kit out of the box.
-- The service's destination-specific leaf class is the thinnest layer - housing 
-  specific implementations for the destination system. 
-    - `DataverseInventorySyncRunner` (`runners/dataverse.py`) contributes 
+- The service's destination-specific leaf class is the thinnest layer — housing
+  specific implementations for the destination system.
+    - `DataverseInventorySyncRunner` (`runners/dataverse.py`) contributes
     only methods specific to Microsoft Dataverse integrations: `entity_set`,
     `alternate_key_field`, `load_settings()`, `build_client()`, and
     `build_payload()`.
     - It does **not** inherit its source feed. The feed format a run reads
-    is set at construction time (e.g. 
-    `DataverseInventorySyncRunner(source=CsvInventorySource())`) in 
+    is set at construction time (e.g.
+    `DataverseInventorySyncRunner(source=CsvInventorySource())`) in
     `dataverse_sync_runner.py` — via any object satisfying the
     `lag_service_kit.sources.base.RecordSource` protocol. A destination
     inheriting from a source class would fix that destination to one feed
@@ -175,7 +175,7 @@ Concretely:
 ## Layering Patterns
 
 The transport hierarchy (`BaseClient` → `ODataClient` → `DataverseClient`)
-goes beyond simply being reserved for connectors. Services like the sync runner 
+goes beyond simply being reserved for connectors. Services like the sync runner
 are built the same way, for the axis that genuinely is a hierarchy.
   - A base class owns core implementation pieces that are vital to any
   integration and rarely vary.
@@ -201,10 +201,10 @@ concerns that must each stay defined exactly once), and template methods
 for the parts every run requires regardless of axis.
 
 - `lag_service_kit.runners.base.BaseSyncRunner` — the outermost, fully
-  generic layer. Knows the *shape* of a sync run (core execution flow: 
-  load settings → configure logging → authenticate → read records → 
-  write records → report results) but makes no direct implementation or 
-  reference to the shape or type of the source or destination. 
+  generic layer. Knows the *shape* of a sync run (core execution flow:
+  load settings → configure logging → authenticate → read records →
+  write records → report results) but makes no direct implementation or
+  reference to the shape or type of the source or destination.
   It lives in the kit in lieu of any particular service
   to support other service implementations that require this same shape.
   It is generic over `ClientT` (bound to `lag_data_utils.clients.base.BaseClient`),
@@ -214,11 +214,11 @@ for the parts every run requires regardless of axis.
 - `services/inventory-sync-engine/runners/base.py:InventoryDomainMixin`
   — the inventory-domain layer. Knows what an inventory record is
   (e.g., `sku_id`, `item_name`, `unit_price`) and how to dedupe it. Knows
-  nothing about the source feed, wire protocol, or destination. 
-  Its constructor takes a `source: RecordSource` collaborator, 
-  while `load_records()` calls `self.source.read_records()`. 
-  It does not inherit `BaseSyncRunner` and commits to no `ClientT`. 
-  It is a bare mixin combined into a leaf class via multiple inheritance 
+  nothing about the source feed, wire protocol, or destination.
+  Its constructor takes a `source: RecordSource` collaborator,
+  while `load_records()` calls `self.source.read_records()`.
+  It does not inherit `BaseSyncRunner` and commits to no `ClientT`.
+  It is a bare mixin combined into a leaf class via multiple inheritance
   alongside the leaf's required protocol. This is the one class in the
   whole chain that's genuinely specific to this service — every other
   class described below lives in `lag_service_kit`, promoted there

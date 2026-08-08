@@ -188,7 +188,7 @@ itself installs from.
 
 Both `lag-data-utils` and `lag-service-kit` ship a
 `py.typed` marker (PEP 561) so a consumer running `mypy --strict` against
-just a service file still gets full type information instead 
+just a service file still gets full type information instead
 of silently degrading to `Any`.
 
 ---

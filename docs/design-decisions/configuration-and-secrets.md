@@ -73,7 +73,7 @@ overridable the same way and never read from the environment:
    Principle. By keeping our scaffolding stateless and injecting
    dependencies through the service constructors, we keep our core
    orchestration engine incredibly lightweight and testable.
-3. **Flawless Unit Testing:** Constructor injection guarantees that we
+3. **Fully Isolated Unit Testing:** Constructor injection guarantees that we
    can instantiate the sync runners in a local test suite and inject
    mock schemas, mock configurations, and lightweight in-memory
    DataFrames instantly, without mocking global environment variables

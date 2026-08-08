@@ -131,18 +131,18 @@ We use a `@runtime_checkable` Protocol (`ChunkedRecordSource`, in
 `lag_service_kit.sources.base`) to dynamically detect whether an
 incoming record source supports chunked streaming.
 
-* **Interface Segregation & LSP:** Not all source formats can genuinely stream. 
-Forcing a dummy streaming method onto every reader violates the Liskov 
-Substitution Principle and the Interface Segregation Principle. A separate 
-Protocol segregates this optional capability cleanly- abstaining from forcing
+* **Interface Segregation & LSP:** Not all source formats can genuinely stream.
+Forcing a dummy streaming method onto every reader violates the Liskov
+Substitution Principle and the Interface Segregation Principle. A separate
+Protocol segregates this optional capability cleanly — abstaining from forcing
 clients into implementing methods they cannot support.
-* **Type-Safe Narrowing:** It allows Mypy to narrow types inside conditional 
+* **Type-Safe Narrowing:** It allows Mypy to narrow types inside conditional
 blocks. This eliminates the need for unsafe `ignore` workarounds that may hide
 true defects.
-* **CPU vs. I/O Bottlenecks:** While structural `isinstance` checks carry a 
-minor runtime CPU overhead, this check occurs exactly once at the start of the 
-sync run—not inside the inner loop processing thousands of records. In a 
-network-heavy, I/O-bound pipeline, a microsecond-level CPU check is 
+* **CPU vs. I/O Bottlenecks:** While structural `isinstance` checks carry a
+minor runtime CPU overhead, this check occurs exactly once at the start of the
+sync run—not inside the inner loop processing thousands of records. In a
+network-heavy, I/O-bound pipeline, a microsecond-level CPU check is
 mathematically irrelevant compared to milliseconds of network latency, adding
 little-to-no cost to implementing this clean and predictable design.
 
