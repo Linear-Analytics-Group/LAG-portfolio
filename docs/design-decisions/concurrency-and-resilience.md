@@ -12,6 +12,7 @@ in-flight write futures.
 - [Multi-Threaded Concurrency vs. OData v4 `$batch`](#multi-threaded-concurrency-vs-odata-v4-batch)
 - [Circuit Breaker vs. Unconditional Retry Exhaustion](#circuit-breaker-vs-unconditional-retry-exhaustion)
 - [Resilience & Rate Limiting Strategy](#resilience--rate-limiting-strategy)
+- [Known Limitation: Full-Dataset Materialization Between Read and Write](#known-limitation-full-dataset-materialization-between-read-and-write)
 
 ## Multi-Threaded Concurrency vs. OData v4 `$batch`
 
@@ -136,10 +137,12 @@ already-failing destination.
   finish (`concurrent.futures.wait(..., return_when=FIRST_COMPLETED)`),
   collects every future that completed, and submits one new future per
   record still pending, repeating until the whole batch has been
-  submitted. This mirrors, on the write side, the same bound
-  `ChunkedRecordSource`/`dedupe_last_seen_chunks` already gave the read
-  side — the two sides no longer part ways once dedup ends. Records are
-  still submitted to the executor in `records`' own order regardless of
+  submitted. This bounds only the write side's in-flight-futures
+  memory — it says nothing about the deduplicated dataset itself,
+  which is fully materialized in memory before `sync_records()` is
+  ever called; see [Known Limitation: Full-Dataset Materialization
+  Between Read and Write](#known-limitation-full-dataset-materialization-between-read-and-write)
+  below. Records are still submitted to the executor in `records`' own order regardless of
   the window, so the circuit breaker's skip semantics and per-record
   failure isolation are unaffected by windowing; `write_window_size`
   changes only how many futures are ever held in memory at once. See
@@ -156,6 +159,73 @@ already-failing destination.
   same trust-the-caller stance this repo already takes with
   `ConsecutiveFailureCircuitBreaker.threshold`, which is equally
   unvalidated.
+
+## Known Limitation: Full-Dataset Materialization Between Read and Write
+
+`load_records()` returns a single, fully deduplicated `pd.DataFrame`
+— one row per unique `dedupe_key` value — and `BaseSyncRunner.run()`
+holds that whole object in memory for the entire `sync_records()`
+call that follows. Neither the read-side chunking
+(`ChunkedRecordSource`, `dedupe_last_seen_chunks`) nor the write-side
+futures window (`write_window_size`, above) touches this: each bounds
+a different thing — raw-row memory during the read pass, and
+in-flight-futures memory during the write pass — not the deduplicated
+dataset itself, which sits fully materialized between the two.
+
+This is not an oversight; it follows from the dedup semantics chosen.
+"Last-write-wins" means a row for a given key seen near the end of the
+feed supersedes one seen near the start, so no key's final value can
+be known until the entire feed has been read. Nothing short of
+changing that guarantee removes the need to see every row before any
+row can be finalized.
+
+**The practical ceiling:** memory scales with the feed's *unique key
+count*, not its total row count — already an improvement over
+concatenating every chunk before deduping (see
+`dedupe_last_seen_chunks`'s own docstring) — but a feed with an
+extremely large number of unique keys (tens of millions) can still
+exhaust available memory before `sync_records()` issues its first
+request, regardless of `chunksize` or `write_window_size`. This
+portfolio's scope has not required addressing that ceiling; it's
+documented here as a known, deliberate boundary, not a bug.
+
+**How this would be removed, if a future feed size required it:**
+replace `dedupe_last_seen_chunks`'s in-memory `dict` with a
+disk-backed key-value store — a local `sqlite3` table (standard
+library, no new dependency) keyed by `dedupe_key`, populated via
+`INSERT OR REPLACE` as each chunk streams through. `INSERT OR REPLACE`
+gives last-write-wins semantics for free: a later row for the same
+key overwrites the earlier one on disk, exactly matching today's dict
+behavior, without ever holding more than one chunk's worth of rows in
+Python memory at once.
+
+This only works if the SQLite database is backed by an actual file on
+disk, not `sqlite3.connect(":memory:")` — an in-memory SQLite database
+still consumes RAM exactly like today's `dict` does, defeating the
+entire point. The real implementation needs an explicit on-disk temp
+file (Python's `tempfile` module), the same "temporary, cleaned up
+after use" pattern this repo already applies to Key Vault secrets in
+`infra/azure/key-vault/*.sh` — created for the duration of one sync
+run and deleted once it finishes, never treated as a durable artifact.
+This data has no lifetime beyond a single run: it is never queried by
+anything else and never needs concurrent access from another process,
+which is exactly why a local, embedded SQLite file is the right tool
+here and a networked database (e.g. Postgres) would be unwarranted
+complexity — it would trade a zero-dependency, zero-server-process
+solution for a running server, a connection/auth story, and a new
+external client dependency, none of which this purely single-process,
+single-run scratch space needs.
+
+Once the full read pass completes, the deduplicated result lives in
+the SQLite file rather than in a `pd.DataFrame`; `sync_records()`
+would then read that back out in bounded pages (e.g. a cursor-based
+scan, or `SELECT * FROM records LIMIT ? OFFSET ?`) instead of
+iterating an in-memory DataFrame, removing the full-materialization
+step this section describes. The trade-off: a slower dedup phase
+(disk I/O per row instead of a dict lookup) in exchange for a memory
+ceiling bounded by disk capacity rather than RAM — the right trade
+once RAM is genuinely the binding constraint, and not worth the added
+complexity below that size.
 
 ---
 

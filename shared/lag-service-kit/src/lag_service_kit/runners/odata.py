@@ -294,10 +294,16 @@ class BaseODataSyncRunner(BaseSyncRunner[ODataClient]):
         return_when=FIRST_COMPLETED)`` for at least one to finish,
         collects every future that completed, and submits one new one
         per record still pending, repeating until every record has
-        been submitted. This bounds the write side's memory the same
-        way :attr:`~lag_service_kit.sources.base.ChunkedRecordSource`
-        and ``dedupe_last_seen_chunks`` already bound the read side's,
-        rather than the two sides parting ways once dedup ends. Records
+        been submitted. This bounds only this call's in-flight-futures
+        memory — the fully deduplicated ``records`` DataFrame passed
+        in is already materialized in memory in its entirety before
+        this method is ever called, a separate and larger memory cost
+        this windowing does not address. See
+        ``docs/design-decisions/concurrency-and-resilience.md``'s
+        "Known Limitation: Full-Dataset Materialization Between Read
+        and Write" for why (last-write-wins dedup semantics require
+        seeing the whole feed) and how it could be removed if a future
+        feed size required it (a disk-backed dedup index). Records
         are still submitted to the executor in ``records``' own order
         regardless of the window, so with ``max_workers=1`` every
         record is still attempted strictly in that order — windowing

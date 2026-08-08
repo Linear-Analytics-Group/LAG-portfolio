@@ -80,7 +80,7 @@ Two tempting fixes were rejected:
 ```python
 class _SecretValue(Protocol):
     @property
-    def value(self) -> Optional[str]: ...
+    def value(self) -> str | None: ...
 
 class _SecretClientLike(Protocol):
     def get_secret(self, name: str) -> _SecretValue: ...
@@ -97,7 +97,7 @@ Two structural-typing pitfalls apply to any Protocol modeled on a
 real third-party type, worth stating explicitly:
 
 * **A Protocol member's type must match the real type's optionality
-  exactly.** `_SecretValue.value` is typed `Optional[str]`, matching
+  exactly.** `_SecretValue.value` is typed `str | None`, matching
   the real `KeyVaultSecret.value` exactly (a secret version can exist
   without a value — e.g. disabled or soft-deleted). A Protocol
   narrower than the real type it's supposed to describe always
