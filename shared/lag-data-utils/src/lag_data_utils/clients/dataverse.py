@@ -112,19 +112,21 @@ class DataverseClient(ODataClient):
     ...     environment_url="https://org.crm.dynamics.com",
     ... )
     >>>
-    >>> # Upsert an inventory record
+    >>> # Upsert a record — field and entity names below are a
+    >>> # fictional customer schema, illustrative only, not this
+    >>> # portfolio's own shipped Dataverse solution.
     >>> client.upsert_record(
-    ...     entity_set="lagsol_inventoryitems",
-    ...     alternate_key_name="lagsol_ExternalSKUID",
+    ...     entity_set="contoso_items",
+    ...     alternate_key_name="contoso_itemcode",
     ...     key_value="SKU-00421",
-    ...     payload={"lagsol_quantityonhand": 150, "lagsol_unitcost": 12.99},
+    ...     payload={"contoso_quantityonhand": 150, "contoso_unitcost": 12.99},
     ... )
     >>>
     >>> # Query low-stock items
     >>> low_stock = client.query_records(
-    ...     entity_set="lagsol_inventoryitems",
-    ...     odata_filter="lagsol_quantityonhand lt 10",
-    ...     select_fields=["lagsol_ExternalSKUID", "lagsol_quantityonhand"],
+    ...     entity_set="contoso_items",
+    ...     odata_filter="contoso_quantityonhand lt 10",
+    ...     select_fields=["contoso_itemcode", "contoso_quantityonhand"],
     ... )
     """
 

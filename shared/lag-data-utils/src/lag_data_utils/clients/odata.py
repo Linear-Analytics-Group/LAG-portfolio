@@ -232,10 +232,10 @@ class ODataClient(BaseHttpClient):
         ----------
         entity_set : str
             The pluralized logical name of the target entity collection
-            (e.g., ``"lagsol_inventoryitems"``).
+            (e.g., ``"contoso_items"``).
         alternate_key_name : str
             The schema name of the unique alternate key field used to
-            identify the record (e.g., ``"lagsol_ExternalSKUID"``).
+            identify the record (e.g., ``"contoso_itemcode"``).
         key_value : str
             The specific business key value targeting the record to
             upsert (e.g., an external SKU identifier or ERP primary key).
@@ -258,12 +258,12 @@ class ODataClient(BaseHttpClient):
         Examples
         --------
         >>> response = client.upsert_record(
-        ...     entity_set="lagsol_inventoryitems",
-        ...     alternate_key_name="lagsol_ExternalSKUID",
+        ...     entity_set="contoso_items",
+        ...     alternate_key_name="contoso_itemcode",
         ...     key_value="SKU-00421",
         ...     payload={
-        ...         "lagsol_quantityonhand": 150,
-        ...         "lagsol_unitcost": 12.99,
+        ...         "contoso_quantityonhand": 150,
+        ...         "contoso_unitcost": 12.99,
         ...     },
         ... )
         """
@@ -319,12 +319,12 @@ class ODataClient(BaseHttpClient):
         Examples
         --------
         >>> record = client.get_record(
-        ...     entity_set="lagsol_inventoryitems",
-        ...     alternate_key_name="lagsol_ExternalSKUID",
+        ...     entity_set="contoso_items",
+        ...     alternate_key_name="contoso_itemcode",
         ...     key_value="SKU-00421",
-        ...     select_fields=["lagsol_quantityonhand", "lagsol_unitcost"],
+        ...     select_fields=["contoso_quantityonhand", "contoso_unitcost"],
         ... )
-        >>> print(record["lagsol_quantityonhand"])
+        >>> print(record["contoso_quantityonhand"])
         """
         url = self._build_entity_url(entity_set, alternate_key_name, key_value)
         params: dict[str, Any] = {}
@@ -360,7 +360,7 @@ class ODataClient(BaseHttpClient):
             The pluralized logical name of the target entity collection.
         odata_filter : str, optional
             An OData v4 ``$filter`` expression string to constrain the
-            result set (e.g., ``"lagsol_quantityonhand lt 10"``).
+            result set (e.g., ``"contoso_quantityonhand lt 10"``).
         select_fields : list[str], optional
             A list of field schema names to include in each returned
             record. Equivalent to a SQL ``SELECT`` column list.
@@ -372,7 +372,7 @@ class ODataClient(BaseHttpClient):
             with ``top`` for pagination. Equivalent to SQL ``OFFSET``.
         order_by : str, optional
             An OData ``$orderby`` expression controlling result
-            ordering (e.g., ``"lagsol_createdon desc"``).
+            ordering (e.g., ``"contoso_createdon desc"``).
 
         Returns
         -------
@@ -389,14 +389,14 @@ class ODataClient(BaseHttpClient):
         Examples
         --------
         >>> low_stock = client.query_records(
-        ...     entity_set="lagsol_inventoryitems",
-        ...     odata_filter="lagsol_quantityonhand lt 10",
+        ...     entity_set="contoso_items",
+        ...     odata_filter="contoso_quantityonhand lt 10",
         ...     select_fields=[
-        ...         "lagsol_ExternalSKUID",
-        ...         "lagsol_quantityonhand",
+        ...         "contoso_itemcode",
+        ...         "contoso_quantityonhand",
         ...     ],
         ...     top=500,
-        ...     order_by="lagsol_quantityonhand asc",
+        ...     order_by="contoso_quantityonhand asc",
         ... )
         """
         url = f"{self.base_url}/{entity_set}"
@@ -457,8 +457,8 @@ class ODataClient(BaseHttpClient):
         Examples
         --------
         >>> response = client.delete_record(
-        ...     entity_set="lagsol_inventoryitems",
-        ...     alternate_key_name="lagsol_ExternalSKUID",
+        ...     entity_set="contoso_items",
+        ...     alternate_key_name="contoso_itemcode",
         ...     key_value="SKU-00421",
         ... )
         """
